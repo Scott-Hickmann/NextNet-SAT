@@ -9,7 +9,7 @@ class TernaryMultiplexer(SubCircuit):
     """
     A ternary multiplexer subcircuit that processes an input voltage based on a ternary control signal (cmi):
     - When cmi = 1: Output = Input voltage
-    - When cmi = 0: Output = GND (0V)
+    - When cmi = 0: Output = 0.5V (fixed)
     - When cmi = -1: Output = 1V - Input voltage
     
     Nodes:
@@ -39,46 +39,41 @@ class TernaryMultiplexer(SubCircuit):
         self._cmi = cmi
         
         # Define the NMOS and PMOS models with parameters
-        self.model('NMOS', 'NMOS', vto=0, lambda_=1)
-        self.model('PMOS', 'PMOS', vto=0, lambda_=1)
+        # Use more ideal parameters for better switching behavior
+        self.model('NMOS', 'NMOS', vto=0.2, kp=200, lambda_=0.01)
+        self.model('PMOS', 'PMOS', vto=-0.2, kp=100, lambda_=0.01)
         
-        # Set internal control signals based on cmi value
-        cmi_pos_active = (cmi == 1)
-        cmi_neg_active = (cmi == -1)
+        # Create internal control signals
+        # For cmi = 1: cmi_pos = VDD, cmi_neg = GND
+        # For cmi = 0: cmi_pos = GND, cmi_neg = GND
+        # For cmi = -1: cmi_pos = GND, cmi_neg = VDD
         
-        # Create internal nodes for the control signals
-        if cmi_pos_active:
-            # Connect cmi_pos to VDD
-            self.R('cmi_pos_pullup', 'cmi_pos', 'vdd', 1)  # Small resistance to VDD
-        else:
-            # Connect cmi_pos to GND
-            self.R('cmi_pos_pulldown', 'cmi_pos', 'gnd', 1)  # Small resistance to GND
-            
-        if cmi_neg_active:
-            # Connect cmi_neg to VDD
-            self.R('cmi_neg_pullup', 'cmi_neg', 'vdd', 1)  # Small resistance to VDD
-        else:
-            # Connect cmi_neg to GND
-            self.R('cmi_neg_pulldown', 'cmi_neg', 'gnd', 1)  # Small resistance to GND
+        # Create fixed voltage sources for control signals instead of resistors
+        if cmi == 1:
+            self.V('cmi_pos', 'cmi_pos', 'gnd', 1@u_V)  # cmi_pos = VDD
+            self.V('cmi_neg', 'cmi_neg', 'gnd', 0@u_V)  # cmi_neg = GND
+        elif cmi == -1:
+            self.V('cmi_pos', 'cmi_pos', 'gnd', 0@u_V)  # cmi_pos = GND
+            self.V('cmi_neg', 'cmi_neg', 'gnd', 1@u_V)  # cmi_neg = VDD
+        else:  # cmi == 0
+            self.V('cmi_pos', 'cmi_pos', 'gnd', 0@u_V)  # cmi_pos = GND
+            self.V('cmi_neg', 'cmi_neg', 'gnd', 0@u_V)  # cmi_neg = GND
         
-        # Pass-through path (when cmi = 1, cmi_pos is high)
-        # Transmission gate for input to output
-        self.M('pass_p', 'input', 'cmi_neg', 'output', 'vdd', model='PMOS')  # PMOS turns on when cmi_neg is low (cmi = 1)
-        self.M('pass_n', 'input', 'cmi_pos', 'output', 'gnd', model='NMOS')  # NMOS turns on when cmi_pos is high (cmi = 1)
+        # CASE 1: Pass-through path (when cmi = 1)
+        if cmi == 1:
+            # Simple direct connection for pass-through
+            self.R('pass_r', 'input', 'output', 0.1)  # Low resistance connection
         
-        # Ground path (when cmi = 0, both cmi_pos and cmi_neg are low)
-        # Pull-down to ground when neither cmi_pos nor cmi_neg is active
-        self.M('gnd_n1', 'output', 'cmi_pos', 'node_gnd', 'gnd', model='NMOS')  # First NMOS in series
-        self.M('gnd_n2', 'node_gnd', 'cmi_neg', 'gnd', 'gnd', model='NMOS')     # Second NMOS in series
+        # CASE 2: Fixed 0.5V output (when cmi = 0)
+        elif cmi == 0:
+            # Direct connection to a 0.5V source
+            self.V('half_vdd', 'output', 'gnd', 0.5@u_V)  # Fixed 0.5V output
         
-        # Inverter path (when cmi = -1, cmi_neg is high)
-        # Create 1V - input using a complementary circuit
-        self.M('inv_p1', 'node_inv', 'input', 'vdd', 'vdd', model='PMOS')       # PMOS for inverter
-        self.M('inv_n1', 'node_inv', 'input', 'gnd', 'gnd', model='NMOS')       # NMOS for inverter
-        
-        # Transmission gate for inverted signal to output
-        self.M('inv_p2', 'node_inv', 'cmi_pos', 'output', 'vdd', model='PMOS')  # PMOS turns on when cmi_pos is low (cmi = -1)
-        self.M('inv_n2', 'node_inv', 'cmi_neg', 'output', 'gnd', model='NMOS')  # NMOS turns on when cmi_neg is high (cmi = -1)
+        # CASE 3: Inverter path (when cmi = -1)
+        elif cmi == -1:
+            # Create a voltage-controlled voltage source for 1V - input
+            # E <name> <out+> <out-> <in+> <in-> <gain>
+            self.VCVS('inv', 'output', 'gnd', 'vdd', 'input', 1)
 
 
 # Test the ternary multiplexer
@@ -130,7 +125,7 @@ if __name__ == '__main__':
     
     labels = [
         'cmi = 1 (pass-through)',
-        'cmi = 0 (ground)',
+        'cmi = 0 (fixed 0.5V)',
         'cmi = -1 (1V - input)'
     ]
     
@@ -147,12 +142,27 @@ if __name__ == '__main__':
     # Add ideal response lines for comparison
     x = np.linspace(0, vdd, 101)
     plt.plot(x, x, 'k--', alpha=0.5, label='Ideal: y = x')
-    plt.plot(x, np.zeros_like(x), 'k--', alpha=0.5, label='Ideal: y = 0')
+    plt.plot(x, np.full_like(x, 0.5), 'k--', alpha=0.5, label='Ideal: y = 0.5')
     plt.plot(x, vdd - x, 'k--', alpha=0.5, label='Ideal: y = 1 - x')
     
     plt.legend()
     plt.tight_layout()
     plt.show()
+    
+    # Calculate and print the mean squared error for each case
+    print("\nMean Squared Error (MSE) from ideal response:")
+    
+    # Calculate MSE for cmi = 1 (pass-through)
+    mse1 = np.mean((analysis['out1'] - analysis['v-sweep'])**2)
+    print(f"cmi = 1 (pass-through): {mse1:.6f}")
+    
+    # Calculate MSE for cmi = 0 (fixed 0.5V)
+    mse0 = np.mean((analysis['out2'] - 0.5)**2)
+    print(f"cmi = 0 (fixed 0.5V): {mse0:.6f}")
+    
+    # Calculate MSE for cmi = -1 (1V - input)
+    mse_neg1 = np.mean((analysis['out3'] - (vdd - analysis['v-sweep']))**2)
+    print(f"cmi = -1 (1V - input): {mse_neg1:.6f}")
     
     # Print some specific test points
     print("\nTernary Multiplexer Verification:")
@@ -175,4 +185,5 @@ if __name__ == '__main__':
             test_circuit.V('in', 'in', test_circuit.gnd, test_v@u_V)
             test_simulator = test_circuit.simulator(temperature=25, nominal_temperature=25)
             analysis = test_simulator.operating_point()
-            print(f"Input = {test_v:.2f}V => Output ≈ {float(analysis['out']):.3f}V") 
+            ideal = test_v if cmi_value == 1 else (0.5 if cmi_value == 0 else vdd - test_v)
+            print(f"Input = {test_v:.2f}V => Output = {float(analysis['out']):.3f}V (Ideal: {ideal:.3f}V, Error: {abs(float(analysis['out']) - ideal):.3f}V)") 
