@@ -13,6 +13,10 @@ class NorGate(SubCircuitFactory):
     def __init__(self):
         super().__init__()
         
+        # Define the NMOS and PMOS models with parameters
+        self.model('NMOS', 'NMOS', vto=0, lambda_=1)
+        self.model('PMOS', 'PMOS', vto=0, lambda_=1)
+        
         # PMOS transistors in series (from VDD to output)
         # M <name> <drain node> <gate node> <source node> <bulk/substrate node>
         self.M(1, 'node1', 'input_a', 'vdd', 'vdd', model='PMOS')
@@ -30,10 +34,6 @@ if __name__ == '__main__':
     
     # Create a circuit
     circuit = Circuit('NOR Gate Test')
-    
-    # Define the NMOS and PMOS models
-    circuit.model('NMOS', 'NMOS', kp=2e-4, vto=0.4)
-    circuit.model('PMOS', 'PMOS', kp=2e-4, vto=-0.4)
     
     # Add the NOR gate subcircuit
     circuit.subcircuit(NorGate())
@@ -75,7 +75,7 @@ if __name__ == '__main__':
     print("Simulating with both inputs A and B sweeping simultaneously")
     # We need to run multiple simulations for this since PySpice doesn't support
     # sweeping two sources simultaneously in a single DC analysis
-    sweep_points = 111  # Same number of points as the other sweeps (0 to 1.1V with 0.01V step)
+    sweep_points = 101  # 0 to 1V with 0.01V step
     sweep_voltages = np.linspace(0, vdd, sweep_points)
     output_voltages = []
     
@@ -124,7 +124,7 @@ if __name__ == '__main__':
     
     # Truth table verification
     print("\nNOR Gate Truth Table Verification:")
-    print(f"A=0, B=0 => Output ≈ {analysis1['out'][0]}")
-    print(f"A=1, B=0 => Output ≈ {analysis1['out'][-1]}")
-    print(f"A=0, B=1 => Output ≈ {analysis3['out'][-1]}")
-    print(f"A=1, B=1 => Output ≈ {analysis4['out'][-1]}")
+    print(f"A=0, B=0 => Output ≈ {analysis1['out'][0]:.3f}V")
+    print(f"A=1, B=0 => Output ≈ {analysis1['out'][-1]:.3f}V")
+    print(f"A=0, B=1 => Output ≈ {analysis3['out'][-1]:.3f}V")
+    print(f"A=1, B=1 => Output ≈ {analysis4['out'][-1]:.3f}V")
