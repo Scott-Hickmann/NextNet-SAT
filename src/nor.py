@@ -13,9 +13,11 @@ class NorGate(SubCircuitFactory):
     def __init__(self):
         super().__init__()
         
-        # Define the NMOS and PMOS models with parameters
-        self.model('NMOS', 'NMOS', vto=0, lambda_=1)
-        self.model('PMOS', 'PMOS', vto=0, lambda_=1)
+        # # Define the NMOS and PMOS models with parameters
+        # self.model('NMOS', 'NMOS', vto=0, lambda_=1)
+        # self.model('PMOS', 'PMOS', vto=0, lambda_=1)
+        self.model('NMOS', 'NMOS', vto=0.08, kp=1e-5, lambda_=5)
+        self.model('PMOS', 'PMOS', vto=0.08, kp=1e-5, lambda_=5)
         
         # PMOS transistors in series (from VDD to output)
         # M <name> <drain node> <gate node> <source node> <bulk/substrate node>
