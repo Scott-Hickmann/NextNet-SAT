@@ -113,10 +113,7 @@ def calculate_theoretical_output(vi2, vi3, cmi, cmi2, cmi3, vdd=1.0):
 
 
 # Test the complete branch subcircuit
-if __name__ == '__main__':
-    # Set up logging
-    logger = Logging.setup_logging()
-    
+def main():
     # Create a circuit
     circuit = Circuit('Complete Branch Test')
     
@@ -273,7 +270,7 @@ if __name__ == '__main__':
     plt.subplots_adjust(bottom=0.15)  # Make room for the formula
     
     # Save the plot to a PNG file
-    plt.savefig('branch_simulation_results.png', dpi=300, bbox_inches='tight')
+    plt.savefig('graphs/branch_simulation_results.png', dpi=300, bbox_inches='tight')
     print("Plot saved to 'branch_simulation_results.png'")
     
     plt.show()
@@ -316,3 +313,8 @@ if __name__ == '__main__':
             
             print(f"vi2={vi2}V, vi3={vi3}V => Output Current = {output_current:.6f}A (Theoretical: {theoretical_current:.6f}A)")
             assert abs(output_current - theoretical_current) < 1e-6, "Output current does not match theoretical current"
+
+if __name__ == '__main__':
+    # Set up logging
+    logger = Logging.setup_logging()
+    main()

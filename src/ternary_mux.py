@@ -77,10 +77,7 @@ class TernaryMultiplexer(SubCircuit):
 
 
 # Test the ternary multiplexer
-if __name__ == '__main__':
-    # Set up logging
-    logger = Logging.setup_logging()
-    
+def main():
     # Create a circuit
     circuit = Circuit('Ternary Multiplexer Test')
     
@@ -89,7 +86,7 @@ if __name__ == '__main__':
     circuit.V('dd', 'vdd', circuit.gnd, vdd@u_V)
     
     # Add input voltage source
-    v_in = circuit.V('in', 'in', circuit.gnd, 0.5@u_V)  # Default input of 0.5V
+    circuit.V('in', 'in', circuit.gnd, 0.5@u_V)  # Default input of 0.5V
     
     # Test with different cmi values
     results = []
@@ -147,6 +144,11 @@ if __name__ == '__main__':
     
     plt.legend()
     plt.tight_layout()
+
+    # Save the plot to a PNG file
+    plt.savefig('graphs/ternary_mux_simulation_results.png', dpi=300, bbox_inches='tight')
+    print("Plot saved to 'ternary_mux_simulation_results.png'")
+
     plt.show()
     
     # Calculate and print the mean squared error for each case
@@ -202,3 +204,8 @@ if __name__ == '__main__':
             error = abs(output_value - ideal)
             
             print(f"Input = {test_v:.2f}V => Output = {output_value:.3f}V (Ideal: {ideal:.3f}V, Error: {error:.3f}V)") 
+
+if __name__ == '__main__':
+    # Set up logging
+    logger = Logging.setup_logging()
+    main()
