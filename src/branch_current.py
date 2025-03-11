@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-class ClauseCurrent(SubCircuit):
+class BranchCurrent(SubCircuit):
     """
     A voltage-to-current converter subcircuit that converts an input voltage Vmi
     into a current Imi where Imi = cmi*Vmi.
@@ -35,7 +35,7 @@ class ClauseCurrent(SubCircuit):
         Args:
             cmi (int): The ternary control value (-1, 0, or 1)
         """
-        super().__init__(f'clause_current_{cmi}', *self.NODES)
+        super().__init__(f'branch_current_{cmi}', *self.NODES)
         
         # Validate cmi value
         if cmi not in [-1, 0, 1]:
@@ -69,7 +69,7 @@ if __name__ == '__main__':
     logger = Logging.setup_logging()
     
     # Create a circuit
-    circuit = Circuit('Clause Current Test')
+    circuit = Circuit('Branch Current Test')
     
     # Add power supply
     vdd = 1
@@ -83,9 +83,9 @@ if __name__ == '__main__':
     labels = []
     
     # Create three different current converters with different cmi values
-    converter1 = ClauseCurrent(cmi=1)
-    converter0 = ClauseCurrent(cmi=0)
-    converter_neg1 = ClauseCurrent(cmi=-1)
+    converter1 = BranchCurrent(cmi=1)
+    converter0 = BranchCurrent(cmi=0)
+    converter_neg1 = BranchCurrent(cmi=-1)
     
     # Add the subcircuits to the circuit
     circuit.subcircuit(converter1)
@@ -155,12 +155,12 @@ if __name__ == '__main__':
         # Test each voltage with a fresh circuit
         for test_v in test_voltages:
             # Create a new circuit for each test point
-            test_circuit = Circuit(f'Clause Current Test (cmi={cmi_value}, v_in={test_v})')
+            test_circuit = Circuit(f'Branch Current Test (cmi={cmi_value}, v_in={test_v})')
             test_circuit.V('dd', 'vdd', test_circuit.gnd, vdd@u_V)
             test_circuit.V('in', 'vmi', test_circuit.gnd, test_v@u_V)
             
             # Create and add the converter subcircuit
-            converter = ClauseCurrent(cmi=cmi_value)
+            converter = BranchCurrent(cmi=cmi_value)
             test_circuit.subcircuit(converter)
             
             # Add measurement resistor (1 ohm) to convert current to voltage for measurement
