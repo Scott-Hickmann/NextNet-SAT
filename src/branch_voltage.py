@@ -8,9 +8,9 @@ from ternary_mux import TernaryMultiplexer
 from nor import NorGate
 
 
-class ClauseVoltage(SubCircuit):
+class BranchVoltage(SubCircuit):
     """
-    A clause subcircuit that combines two ternary multiplexers and a NOR gate.
+    A branch subcircuit that combines two ternary multiplexers and a NOR gate.
     
     The circuit takes two input voltages (Vi2 and Vi3) and processes them through
     ternary multiplexers conditioned on cmi2 and cmi3 respectively. The outputs
@@ -29,13 +29,13 @@ class ClauseVoltage(SubCircuit):
     
     def __init__(self, cmi2=0, cmi3=0):
         """
-        Initialize the clause subcircuit with specific cmi2 and cmi3 values.
+        Initialize the branch subcircuit with specific cmi2 and cmi3 values.
         
         Args:
             cmi2 (int): The ternary control value (-1, 0, or 1) for the first multiplexer
             cmi3 (int): The ternary control value (-1, 0, or 1) for the second multiplexer
         """
-        super().__init__(f'clause_{cmi2}_{cmi3}', *self.NODES)
+        super().__init__(f'branch_{cmi2}_{cmi3}', *self.NODES)
             
         # Store cmi values to make the subcircuit name unique
         self._cmi2 = cmi2
@@ -103,13 +103,13 @@ def calculate_theoretical_output(vi2, vi3, cmi2, cmi3, vdd=1.0):
     return mux2_out * mux3_out
 
 
-# Test the clause subcircuit
+# Test the branch subcircuit
 if __name__ == '__main__':
     # Set up logging
     logger = Logging.setup_logging()
     
     # Create a circuit
-    circuit = Circuit('Clause Test')
+    circuit = Circuit('Branch Test')
     
     # Add power supply
     vdd = 1
@@ -131,18 +131,18 @@ if __name__ == '__main__':
         (0, 1),    # First fixed, second pass-through
     ]
     
-    # Create and test each clause
+    # Create and test each branch
     results = []
     labels = []
     
     for idx, (cmi2, cmi3) in enumerate(cmi_combinations):
-        # Create the clause subcircuit
-        clause = ClauseVoltage(cmi2=cmi2, cmi3=cmi3)
-        circuit.subcircuit(clause)
+        # Create the branch subcircuit
+        branch = BranchVoltage(cmi2=cmi2, cmi3=cmi3)
+        circuit.subcircuit(branch)
         
-        # Instantiate the clause
+        # Instantiate the branch
         output_node = f'vmi{idx}'
-        circuit.X(f'clause{idx}', clause.name, 'vi2', 'vi3', output_node, 'vdd', circuit.gnd)
+        circuit.X(f'branch{idx}', branch.name, 'vi2', 'vi3', output_node, 'vdd', circuit.gnd)
         
         # Add to results tracking
         results.append(output_node)
@@ -181,7 +181,7 @@ if __name__ == '__main__':
     
     # Plot for sweeping vi2 with vi3=0
     ax = axes[0, 0]
-    ax.set_title('Clause Response - Sweeping vi2 (vi3=0V)')
+    ax.set_title('Branch Response - Sweeping vi2 (vi3=0V)')
     ax.set_xlabel('vi2 Voltage [V]')
     ax.set_ylabel('vmi Output Voltage [V]')
     ax.grid(True)
@@ -201,7 +201,7 @@ if __name__ == '__main__':
     
     # Plot for sweeping vi2 with vi3=1
     ax = axes[0, 1]
-    ax.set_title('Clause Response - Sweeping vi2 (vi3=1V)')
+    ax.set_title('Branch Response - Sweeping vi2 (vi3=1V)')
     ax.set_xlabel('vi2 Voltage [V]')
     ax.set_ylabel('vmi Output Voltage [V]')
     ax.grid(True)
@@ -221,7 +221,7 @@ if __name__ == '__main__':
     
     # Plot for sweeping vi3 with vi2=0
     ax = axes[1, 0]
-    ax.set_title('Clause Response - Sweeping vi3 (vi2=0V)')
+    ax.set_title('Branch Response - Sweeping vi3 (vi2=0V)')
     ax.set_xlabel('vi3 Voltage [V]')
     ax.set_ylabel('vmi Output Voltage [V]')
     ax.grid(True)
@@ -241,7 +241,7 @@ if __name__ == '__main__':
     
     # Plot for sweeping vi3 with vi2=1
     ax = axes[1, 1]
-    ax.set_title('Clause Response - Sweeping vi3 (vi2=1V)')
+    ax.set_title('Branch Response - Sweeping vi3 (vi2=1V)')
     ax.set_xlabel('vi3 Voltage [V]')
     ax.set_ylabel('vmi Output Voltage [V]')
     ax.grid(True)
@@ -263,7 +263,7 @@ if __name__ == '__main__':
     plt.show()
     
     # Print truth table verification for a few key combinations
-    print("\nClause Truth Table Verification:")
+    print("\nBranch Truth Table Verification:")
     
     # Test each cmi combination with specific input values
     test_voltages = [(0, 0), (0, 1), (1, 0), (1, 1)]
@@ -273,15 +273,15 @@ if __name__ == '__main__':
         
         for vi2, vi3 in test_voltages:
             # Create a new circuit for each test point
-            test_circuit = Circuit(f'Clause Test (cmi2={cmi2}, cmi3={cmi3}, vi2={vi2}, vi3={vi3})')
+            test_circuit = Circuit(f'Branch Test (cmi2={cmi2}, cmi3={cmi3}, vi2={vi2}, vi3={vi3})')
             test_circuit.V('dd', 'vdd', test_circuit.gnd, vdd@u_V)
             test_circuit.V('i2', 'vi2', test_circuit.gnd, vi2@u_V)
             test_circuit.V('i3', 'vi3', test_circuit.gnd, vi3@u_V)
             
-            # Create and add the clause subcircuit
-            clause = ClauseVoltage(cmi2=cmi2, cmi3=cmi3)
-            test_circuit.subcircuit(clause)
-            test_circuit.X('clause', clause.name, 'vi2', 'vi3', 'vmi', 'vdd', test_circuit.gnd)
+            # Create and add the branch subcircuit
+            branch = BranchVoltage(cmi2=cmi2, cmi3=cmi3)
+            test_circuit.subcircuit(branch)
+            test_circuit.X('branch', branch.name, 'vi2', 'vi3', 'vmi', 'vdd', test_circuit.gnd)
             
             # Run simulation
             test_simulator = test_circuit.simulator(temperature=25, nominal_temperature=25)
