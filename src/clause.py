@@ -2,6 +2,7 @@ import PySpice.Logging.Logging as Logging
 from PySpice.Spice.Netlist import Circuit, SubCircuit
 from PySpice.Unit import u_V
 import matplotlib.pyplot as plt
+import numpy as np
 
 from ternary_mux import TernaryMultiplexer
 from nor import NorGate
@@ -58,6 +59,48 @@ class Clause(SubCircuit):
         
         # Instantiate the NOR gate
         self.X('nor1', nor_gate.NAME, 'mux2_out', 'mux3_out', 'vmi', 'vdd', 'gnd')
+
+
+# Helper function to calculate the theoretical output based on the mathematical model
+def calculate_theoretical_output(vi2, vi3, cmi2, cmi3, vdd=1.0):
+    """
+    Calculate the theoretical output based on the mathematical model:
+    
+    V_mi = (mux2_output) * (mux3_output)
+    
+    Where mux output depends on cmi value:
+    - cmi = 1: VDD - Vi
+    - cmi = 0: VDD/2
+    - cmi = -1: Vi
+    
+    Args:
+        vi2: Input voltage 2
+        vi3: Input voltage 3
+        cmi2: Control value for multiplexer 2
+        cmi3: Control value for multiplexer 3
+        vdd: Supply voltage (default 1.0V)
+        
+    Returns:
+        Theoretical output voltage
+    """
+    # Calculate mux2 output
+    if cmi2 == 1:
+        mux2_out = vdd - vi2
+    elif cmi2 == 0:
+        mux2_out = vdd / 2
+    else:  # cmi2 == -1
+        mux2_out = vi2
+    
+    # Calculate mux3 output
+    if cmi3 == 1:
+        mux3_out = vdd - vi3
+    elif cmi3 == 0:
+        mux3_out = vdd / 2
+    else:  # cmi3 == -1
+        mux3_out = vi3
+    
+    # Return the product
+    return mux2_out * mux3_out
 
 
 # Test the clause subcircuit
@@ -130,6 +173,12 @@ if __name__ == '__main__':
     # Plot the results
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
     
+    # Create voltage sweep arrays for theoretical calculations
+    v_sweep = np.linspace(0, vdd, 101)
+    
+    # Define a color cycle to ensure matching colors
+    colors = plt.cm.tab10.colors
+    
     # Plot for sweeping vi2 with vi3=0
     ax = axes[0, 0]
     ax.set_title('Clause Response - Sweeping vi2 (vi3=0V)')
@@ -137,8 +186,16 @@ if __name__ == '__main__':
     ax.set_ylabel('vmi Output Voltage [V]')
     ax.grid(True)
     
-    for idx, label in enumerate(labels):
-        ax.plot(analysis1['v-sweep'], analysis1[results[idx]], label=label)
+    for idx, (cmi2, cmi3) in enumerate(cmi_combinations):
+        color = colors[idx % len(colors)]
+        # Plot simulated results with specific color
+        sim_line, = ax.plot(analysis1['v-sweep'], analysis1[results[idx]], 
+                           color=color, label=f'Simulated: cmi2={cmi2}, cmi3={cmi3}')
+        
+        # Calculate and plot theoretical results with matching color
+        theoretical = [calculate_theoretical_output(v, 0, cmi2, cmi3, vdd) for v in v_sweep]
+        ax.plot(v_sweep, theoretical, '--', color=color, 
+               label=f'Theoretical: cmi2={cmi2}, cmi3={cmi3}')
     
     ax.legend()
     
@@ -149,8 +206,16 @@ if __name__ == '__main__':
     ax.set_ylabel('vmi Output Voltage [V]')
     ax.grid(True)
     
-    for idx, label in enumerate(labels):
-        ax.plot(analysis2['v-sweep'], analysis2[results[idx]], label=label)
+    for idx, (cmi2, cmi3) in enumerate(cmi_combinations):
+        color = colors[idx % len(colors)]
+        # Plot simulated results with specific color
+        ax.plot(analysis2['v-sweep'], analysis2[results[idx]], 
+               color=color, label=f'Simulated: cmi2={cmi2}, cmi3={cmi3}')
+        
+        # Calculate and plot theoretical results with matching color
+        theoretical = [calculate_theoretical_output(v, vdd, cmi2, cmi3, vdd) for v in v_sweep]
+        ax.plot(v_sweep, theoretical, '--', color=color, 
+               label=f'Theoretical: cmi2={cmi2}, cmi3={cmi3}')
     
     ax.legend()
     
@@ -161,8 +226,16 @@ if __name__ == '__main__':
     ax.set_ylabel('vmi Output Voltage [V]')
     ax.grid(True)
     
-    for idx, label in enumerate(labels):
-        ax.plot(analysis3['v-sweep'], analysis3[results[idx]], label=label)
+    for idx, (cmi2, cmi3) in enumerate(cmi_combinations):
+        color = colors[idx % len(colors)]
+        # Plot simulated results with specific color
+        ax.plot(analysis3['v-sweep'], analysis3[results[idx]], 
+               color=color, label=f'Simulated: cmi2={cmi2}, cmi3={cmi3}')
+        
+        # Calculate and plot theoretical results with matching color
+        theoretical = [calculate_theoretical_output(0, v, cmi2, cmi3, vdd) for v in v_sweep]
+        ax.plot(v_sweep, theoretical, '--', color=color, 
+               label=f'Theoretical: cmi2={cmi2}, cmi3={cmi3}')
     
     ax.legend()
     
@@ -173,8 +246,16 @@ if __name__ == '__main__':
     ax.set_ylabel('vmi Output Voltage [V]')
     ax.grid(True)
     
-    for idx, label in enumerate(labels):
-        ax.plot(analysis4['v-sweep'], analysis4[results[idx]], label=label)
+    for idx, (cmi2, cmi3) in enumerate(cmi_combinations):
+        color = colors[idx % len(colors)]
+        # Plot simulated results with specific color
+        ax.plot(analysis4['v-sweep'], analysis4[results[idx]], 
+               color=color, label=f'Simulated: cmi2={cmi2}, cmi3={cmi3}')
+        
+        # Calculate and plot theoretical results with matching color
+        theoretical = [calculate_theoretical_output(vdd, v, cmi2, cmi3, vdd) for v in v_sweep]
+        ax.plot(v_sweep, theoretical, '--', color=color, 
+               label=f'Theoretical: cmi2={cmi2}, cmi3={cmi3}')
     
     ax.legend()
     
@@ -215,8 +296,11 @@ if __name__ == '__main__':
             # and output ≈ 0 when either input is close to 1
             expected_nor = "high" if mux2_out < 0.2 and mux3_out < 0.2 else "low"
             
+            # Calculate theoretical output based on mathematical model
+            theoretical_output = calculate_theoretical_output(vi2, vi3, cmi2, cmi3, vdd)
+            
             # Extract output value
             output_value = float(analysis['vmi'])
             output_state = "high" if output_value > 0.8 else ("mid" if output_value > 0.2 else "low")
             
-            print(f"vi2={vi2}V, vi3={vi3}V => vmi={output_value:.3f}V (Expected NOR: {expected_nor})") 
+            print(f"vi2={vi2}V, vi3={vi3}V => vmi={output_value:.3f}V (Expected NOR: {expected_nor}, Theoretical: {theoretical_output:.3f}V)") 
