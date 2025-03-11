@@ -8,7 +8,7 @@ from ternary_mux import TernaryMultiplexer
 from nor import NorGate
 
 
-class Clause(SubCircuit):
+class ClauseVoltage(SubCircuit):
     """
     A clause subcircuit that combines two ternary multiplexers and a NOR gate.
     
@@ -137,7 +137,7 @@ if __name__ == '__main__':
     
     for idx, (cmi2, cmi3) in enumerate(cmi_combinations):
         # Create the clause subcircuit
-        clause = Clause(cmi2=cmi2, cmi3=cmi3)
+        clause = ClauseVoltage(cmi2=cmi2, cmi3=cmi3)
         circuit.subcircuit(clause)
         
         # Instantiate the clause
@@ -279,7 +279,7 @@ if __name__ == '__main__':
             test_circuit.V('i3', 'vi3', test_circuit.gnd, vi3@u_V)
             
             # Create and add the clause subcircuit
-            clause = Clause(cmi2=cmi2, cmi3=cmi3)
+            clause = ClauseVoltage(cmi2=cmi2, cmi3=cmi3)
             test_circuit.subcircuit(clause)
             test_circuit.X('clause', clause.name, 'vi2', 'vi3', 'vmi', 'vdd', test_circuit.gnd)
             
