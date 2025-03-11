@@ -89,9 +89,9 @@ def main():
     circuit.V('v3_init', v3_node, circuit.gnd, 0.5)
     
     # Set control values
-    cm1 = 0
+    cm1 = -1
     cm2 = 1
-    cm3 = 0
+    cm3 = -1
     
     print(f"Testing Clause with cm1={cm1}, cm2={cm2}, cm3={cm3}")
     
