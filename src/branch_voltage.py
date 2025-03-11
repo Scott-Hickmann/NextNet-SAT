@@ -104,10 +104,7 @@ def calculate_theoretical_output(vi2, vi3, cmi2, cmi3, vdd=1.0):
 
 
 # Test the branch subcircuit
-if __name__ == '__main__':
-    # Set up logging
-    logger = Logging.setup_logging()
-    
+def main():
     # Create a circuit
     circuit = Circuit('Branch Test')
     
@@ -260,6 +257,11 @@ if __name__ == '__main__':
     ax.legend()
     
     plt.tight_layout()
+
+    # Save the plot to a PNG file
+    plt.savefig('graphs/branch_voltage_simulation_results.png', dpi=300, bbox_inches='tight')
+    print("Plot saved to 'branch_voltage_simulation_results.png'")
+
     plt.show()
     
     # Print truth table verification for a few key combinations
@@ -301,6 +303,10 @@ if __name__ == '__main__':
             
             # Extract output value
             output_value = float(analysis['vmi'])
-            output_state = "high" if output_value > 0.8 else ("mid" if output_value > 0.2 else "low")
             
-            print(f"vi2={vi2}V, vi3={vi3}V => vmi={output_value:.3f}V (Expected NOR: {expected_nor}, Theoretical: {theoretical_output:.3f}V)") 
+            print(f"vi2={vi2}V, vi3={vi3}V => vmi={output_value:.3f}V (Expected NOR: {expected_nor}, Theoretical: {theoretical_output:.3f}V)")
+
+if __name__ == '__main__':
+    # Set up logging
+    logger = Logging.setup_logging()
+    main()

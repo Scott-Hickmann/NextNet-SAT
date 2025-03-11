@@ -16,8 +16,8 @@ class NorGate(SubCircuitFactory):
         # # Define the NMOS and PMOS models with parameters
         # self.model('NMOS', 'NMOS', vto=0, lambda_=1)
         # self.model('PMOS', 'PMOS', vto=0, lambda_=1)
-        self.model('NMOS', 'NMOS', vto=0.08, kp=1e-5, lambda_=5)
-        self.model('PMOS', 'PMOS', vto=0.08, kp=1e-5, lambda_=5)
+        self.model('NMOS', 'NMOS', vto=0, kp=1e-5, lambda_=5)
+        self.model('PMOS', 'PMOS', vto=0, kp=1e-5, lambda_=5)
         
         # PMOS transistors in series (from VDD to output)
         # M <name> <drain node> <gate node> <source node> <bulk/substrate node>
@@ -30,10 +30,7 @@ class NorGate(SubCircuitFactory):
 
 
 # Test plots for the NOR gate
-if __name__ == '__main__':
-    # Set up logging
-    logger = Logging.setup_logging()
-    
+def main():
     # Create a circuit
     circuit = Circuit('NOR Gate Test')
     
@@ -122,6 +119,11 @@ if __name__ == '__main__':
     ax3.legend()
     
     plt.tight_layout()
+
+    # Save the plot to a PNG file
+    plt.savefig('graphs/nor_gate_simulation_results.png', dpi=300, bbox_inches='tight')
+    print("Plot saved to 'nor_gate_simulation_results.png'")
+    
     plt.show()
     
     # Truth table verification
@@ -130,3 +132,8 @@ if __name__ == '__main__':
     print(f"A=1, B=0 => Output ≈ {analysis1['out'][-1]:.3f}V")
     print(f"A=0, B=1 => Output ≈ {analysis3['out'][-1]:.3f}V")
     print(f"A=1, B=1 => Output ≈ {analysis4['out'][-1]:.3f}V")
+
+if __name__ == '__main__':
+    # Set up logging
+    logger = Logging.setup_logging()
+    main()
