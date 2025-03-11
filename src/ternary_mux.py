@@ -153,15 +153,20 @@ if __name__ == '__main__':
     print("\nMean Squared Error (MSE) from ideal response:")
     
     # Calculate MSE for cmi = 1 (pass-through)
-    mse1 = np.mean((analysis['out1'] - analysis['v-sweep'])**2)
+    # Convert PySpice values to numpy arrays before calculations
+    out1_values = np.array(analysis['out1'])
+    v_sweep_values = np.array(analysis['v-sweep'])
+    mse1 = np.mean((out1_values - v_sweep_values)**2)
     print(f"cmi = 1 (pass-through): {mse1:.6f}")
     
     # Calculate MSE for cmi = 0 (fixed 0.5V)
-    mse0 = np.mean((analysis['out2'] - 0.5)**2)
+    out2_values = np.array(analysis['out2'])
+    mse0 = np.mean((out2_values - 0.5)**2)
     print(f"cmi = 0 (fixed 0.5V): {mse0:.6f}")
     
     # Calculate MSE for cmi = -1 (1V - input)
-    mse_neg1 = np.mean((analysis['out3'] - (vdd - analysis['v-sweep']))**2)
+    out3_values = np.array(analysis['out3'])
+    mse_neg1 = np.mean((out3_values - (vdd - v_sweep_values))**2)
     print(f"cmi = -1 (1V - input): {mse_neg1:.6f}")
     
     # Print some specific test points
@@ -169,21 +174,31 @@ if __name__ == '__main__':
     
     test_voltages = [0.0, 0.25, 0.5, 0.75, 1.0]
     
-    # Create a new circuit for point tests
+    # Test each cmi value
     for cmi_value in [1, 0, -1]:
-        # Create a new circuit for each cmi value
-        test_circuit = Circuit(f'Ternary Multiplexer Test (cmi={cmi_value})')
-        test_circuit.V('dd', 'vdd', test_circuit.gnd, vdd@u_V)
-        
-        # Create and add the multiplexer subcircuit
-        mux = TernaryMultiplexer(cmi=cmi_value)
-        test_circuit.subcircuit(mux)
-        test_circuit.X('mux', mux.name, 'in', 'out', 'vdd', test_circuit.gnd)
-        
         print(f"\ncmi = {cmi_value}:")
+        
+        # Test each voltage with a fresh circuit
         for test_v in test_voltages:
+            # Create a new circuit for each test point
+            test_circuit = Circuit(f'Ternary Multiplexer Test (cmi={cmi_value}, v_in={test_v})')
+            test_circuit.V('dd', 'vdd', test_circuit.gnd, vdd@u_V)
             test_circuit.V('in', 'in', test_circuit.gnd, test_v@u_V)
+            
+            # Create and add the multiplexer subcircuit
+            mux = TernaryMultiplexer(cmi=cmi_value)
+            test_circuit.subcircuit(mux)
+            test_circuit.X('mux', mux.name, 'in', 'out', 'vdd', test_circuit.gnd)
+            
+            # Run simulation
             test_simulator = test_circuit.simulator(temperature=25, nominal_temperature=25)
             analysis = test_simulator.operating_point()
+            
+            # Calculate ideal output and error
             ideal = test_v if cmi_value == 1 else (0.5 if cmi_value == 0 else vdd - test_v)
-            print(f"Input = {test_v:.2f}V => Output = {float(analysis['out']):.3f}V (Ideal: {ideal:.3f}V, Error: {abs(float(analysis['out']) - ideal):.3f}V)") 
+            
+            # Extract single value from analysis result to avoid deprecation warning
+            output_value = float(analysis['out'][0]) if hasattr(analysis['out'], '__len__') else float(analysis['out'])
+            error = abs(output_value - ideal)
+            
+            print(f"Input = {test_v:.2f}V => Output = {output_value:.3f}V (Ideal: {ideal:.3f}V, Error: {error:.3f}V)") 
