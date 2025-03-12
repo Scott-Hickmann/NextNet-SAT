@@ -22,42 +22,46 @@ class Clause(SubCircuit):
     - v3: Third voltage node (input/output)
     - vdd: Power supply
     - gnd: Ground
+    
+    The C parameter is used for all Branch subcircuits.
     """
     NODES = ('v1', 'v2', 'v3', 'vdd', 'gnd')
     
-    def __init__(self, cm1=0, cm2=0, cm3=0):
+    def __init__(self, cm1, cm2, cm3, C):
         """
-        Initialize the Clause subcircuit with specific cm1, cm2, cm3 values.
+        Initialize the Clause subcircuit with specific cm1, cm2, cm3 values and capacitance.
         
         Args:
-            cm1 (int): The first ternary control value (-1, 0, or 1)
-            cm2 (int): The second ternary control value (-1, 0, or 1)
-            cm3 (int): The third ternary control value (-1, 0, or 1)
+            cm1 (int): The first ternary control value (-1 or 1)
+            cm2 (int): The second ternary control value (-1 or 1)
+            cm3 (int): The third ternary control value (-1 or 1)
+            C (float): The capacitance value in Farads (default: 1pF)
         """
-        super().__init__(f'clause_{cm1}_{cm2}_{cm3}', *self.NODES)
+        super().__init__(f'clause_{cm1}_{cm2}_{cm3}_{C}', *self.NODES)
             
-        # Store control values
+        # Store control values and capacitance
         self._cm1 = cm1
         self._cm2 = cm2
         self._cm3 = cm3
+        self._C = C
+
+        # 0 is not allowed
+        if cm1 == 0 or cm2 == 0 or cm3 == 0:
+            raise ValueError("0 is not allowed as a control value")
         
         # Create the three Branch subcircuits with different configurations
-        branch1 = Branch(cmi=cm1, cmi2=cm2, cmi3=cm3)
-        branch2 = Branch(cmi=cm2, cmi2=cm3, cmi3=cm1)
-        branch3 = Branch(cmi=cm3, cmi2=cm1, cmi3=cm2)
+        branch1 = Branch(cmi=cm1, cmi2=cm2, cmi3=cm3, C=C)
+        branch2 = Branch(cmi=cm2, cmi2=cm3, cmi3=cm1, C=C)
+        branch3 = Branch(cmi=cm3, cmi2=cm1, cmi3=cm2, C=C)
         
         # Add the subcircuits
         self.subcircuit(branch1)
         self.subcircuit(branch2)
         self.subcircuit(branch3)
         
-        # Instantiate Branch 1: vi2=v2, vi3=v3, current flows into v1
+        # Instantiate the Branch subcircuits
         self.X('branch1', branch1.name, 'v2', 'v3', 'v1', 'gnd', 'vdd', 'gnd')
-        
-        # Instantiate Branch 2: vi2=v3, vi3=v1, current flows into v2
         self.X('branch2', branch2.name, 'v3', 'v1', 'v2', 'gnd', 'vdd', 'gnd')
-        
-        # Instantiate Branch 3: vi2=v1, vi3=v2, current flows into v3
         self.X('branch3', branch3.name, 'v1', 'v2', 'v3', 'gnd', 'vdd', 'gnd')
 
 
@@ -89,28 +93,21 @@ def main():
     circuit.V('v3_init', v3_node, circuit.gnd, 0.5)
     
     # Set control values
-    cm1 = -1
+    cm1 = 1
     cm2 = 1
     cm3 = -1
     
     print(f"Testing Clause with cm1={cm1}, cm2={cm2}, cm3={cm3}")
     
     # Create the Clause subcircuit
-    clause = Clause(cm1=cm1, cm2=cm2, cm3=cm3)
+    C = 1e-12  # 1nF
+    clause = Clause(cm1=cm1, cm2=cm2, cm3=cm3, C=C)
     circuit.subcircuit(clause)
     
     # Instantiate the Clause
     circuit.X('clause', clause.name, v1_node, v2_node, v3_node, 'vdd', circuit.gnd)
     
-    # Run simulation to establish operating point
-    simulator = circuit.simulator(temperature=25, nominal_temperature=25)
-    simulator.options(reltol=1e-3, abstol=1e-6, itl1=100, itl2=50)
-    
     try:
-        # Run operating point analysis
-        op_analysis = simulator.operating_point()
-        print("Operating point analysis successful")
-        
         # Create a new circuit for transient analysis
         transient_circuit = Circuit('Clause Transient Analysis')
         
@@ -119,16 +116,9 @@ def main():
         
         # Add capacitors from each node to ground
         # Using 1nF capacitors
-        capacitance = 1e-9  # 1nF
-        transient_circuit.C('c1', v1_node, transient_circuit.gnd, capacitance)
-        transient_circuit.C('c2', v2_node, transient_circuit.gnd, capacitance)
-        transient_circuit.C('c3', v3_node, transient_circuit.gnd, capacitance)
-        
-        # Add small resistors in parallel with capacitors to improve convergence
-        # These high-value resistors (1MΩ) won't significantly affect the circuit behavior
-        transient_circuit.R('r1', v1_node, transient_circuit.gnd, 1e6)
-        transient_circuit.R('r2', v2_node, transient_circuit.gnd, 1e6)
-        transient_circuit.R('r3', v3_node, transient_circuit.gnd, 1e6)
+        transient_circuit.C('c1', v1_node, transient_circuit.gnd, C)
+        transient_circuit.C('c2', v2_node, transient_circuit.gnd, C)
+        transient_circuit.C('c3', v3_node, transient_circuit.gnd, C)
         
         # Add the Clause subcircuit
         transient_circuit.subcircuit(clause)
@@ -138,9 +128,9 @@ def main():
         
         # Set initial conditions for the capacitors based on operating point
         # This helps avoid convergence issues at the start of the simulation
-        v1_init = float(op_analysis[v1_node][0])
-        v2_init = float(op_analysis[v2_node][0])
-        v3_init = float(op_analysis[v3_node][0])
+        v1_init = 0.5
+        v2_init = 0.5
+        v3_init = 0.5
         
         # Run transient simulation
         transient_simulator = transient_circuit.simulator(temperature=25, nominal_temperature=25)
@@ -150,8 +140,8 @@ def main():
         transient_simulator.initial_condition(v1=v1_init, v2=v2_init, v3=v3_init)
         
         # Run transient analysis
-        step_time = 1e-6  # 1 microsecond steps
-        end_time = 1e-3   # 1 millisecond total
+        step_time = 1e-3 # 1 millisecond steps
+        end_time = 60   # 60 seconds total
         analysis = transient_simulator.transient(step_time=step_time, end_time=end_time)
         
         # Convert PySpice values to plain NumPy arrays to avoid Unit conversion issues
@@ -170,9 +160,9 @@ def main():
         dv3_dt = np.gradient(v3_array, time_array)
         
         # Calculate capacitor currents
-        i1_cap = capacitance * dv1_dt
-        i2_cap = capacitance * dv2_dt
-        i3_cap = capacitance * dv3_dt
+        i1_cap = C * dv1_dt
+        i2_cap = C * dv2_dt
+        i3_cap = C * dv3_dt
         
         # Calculate resistor currents: I = V/R
         i1_res = v1_array / 1e6

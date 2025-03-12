@@ -1,0 +1,321 @@
+import PySpice.Logging.Logging as Logging
+from PySpice.Spice.Netlist import Circuit
+import matplotlib.pyplot as plt
+
+from clause import Clause
+from variable import Variable
+
+
+def create_3sat_circuit(clauses, variable_names):
+    """
+    Create a circuit that represents a 3-SAT problem.
+    
+    Args:
+        clauses: List of clauses, where each clause is a list of 3 tuples (var_idx, is_negated)
+                 var_idx is the index in variable_names, is_negated is True if the variable is negated
+        variable_names: List of variable names
+        
+    Returns:
+        A PySpice Circuit object representing the 3-SAT problem
+    """
+    # Create the main circuit
+    circuit = Circuit('3-SAT Solver')
+    
+    # Add power supply
+    vdd = 1
+    circuit.V('dd', 'vdd', circuit.gnd, vdd)
+    
+    # Create variable nodes
+    var_nodes = [f'var_{name}' for name in variable_names]
+    
+    # Set a common capacitance value for all components
+    C = 1e-9  # 1nF
+    
+    # Create Variable subcircuits for each variable
+    variables = []
+    for i, name in enumerate(variable_names):
+        var = Variable(C=C)
+        variables.append(var)
+        circuit.subcircuit(var)
+        
+        # Instantiate the Variable subcircuit
+        circuit.X(f'var_{name}', var.name, var_nodes[i], circuit.gnd)
+    
+    # Create Clause subcircuits for each clause
+    for i, clause in enumerate(clauses):
+        # Convert the clause to cm values
+        cm_values = []
+        for var_idx, is_negated in clause:
+            # cm = -1 if negated, 1 if not negated
+            cm_values.append(-1 if is_negated else 1)
+        
+        # Create the Clause subcircuit
+        clause_circuit = Clause(cm1=cm_values[0], cm2=cm_values[1], cm3=cm_values[2], C=C)
+        circuit.subcircuit(clause_circuit)
+        
+        # Get the variable nodes for this clause
+        v1_node = var_nodes[clause[0][0]]
+        v2_node = var_nodes[clause[1][0]]
+        v3_node = var_nodes[clause[2][0]]
+        
+        # Instantiate the Clause subcircuit
+        circuit.X(f'clause_{i}', clause_circuit.name, v1_node, v2_node, v3_node, 'vdd', circuit.gnd)
+    
+    return circuit
+
+
+def run_3sat_simulation(circuit, variable_names, simulation_time=10, step_time=1e-3):
+    """
+    Run a transient simulation on the 3-SAT circuit.
+    
+    Args:
+        circuit: The PySpice Circuit object
+        variable_names: List of variable names
+        simulation_time: Total simulation time in seconds
+        step_time: Time step for the simulation in seconds
+        
+    Returns:
+        The simulation results
+    """
+    # Clone the original circuit for transient analysis
+    transient_circuit = circuit.clone(title='3-SAT Transient Analysis')
+    
+    # Run transient simulation with improved convergence parameters
+    simulator = transient_circuit.simulator(temperature=25, nominal_temperature=25)
+    
+    # Add more options to improve convergence
+    simulator.options(
+        reltol=1e-2,     # Relaxed relative tolerance (was 1e-3)
+        abstol=1e-5,     # Relaxed absolute tolerance (was 1e-6)
+        itl1=500,        # Increased DC iteration limit (was 100)
+        itl2=200,        # Increased DC transfer curve iteration limit (was 50)
+        itl4=100,        # Transient analysis iteration limit
+        gmin=1e-10,      # Minimum conductance
+        method='gear',   # Integration method (alternatives: 'trap', 'euler')
+        maxord=2         # Maximum order for integration method
+    )
+    
+    # Set initial conditions for variable nodes to help convergence
+    # Initialize all variables to 0.5V (middle value)
+    initial_conditions = {}
+    for name in variable_names:
+        node_name = f'var_{name}'
+        initial_conditions[node_name] = 0.5  # Initialize to 0.5V
+    
+    # Apply initial conditions
+    if initial_conditions:
+        simulator.initial_condition(**initial_conditions)
+    
+    # Run transient analysis
+    analysis = simulator.transient(step_time=step_time, end_time=simulation_time)
+    
+    return analysis
+
+
+def plot_3sat_results(analysis, variable_names):
+    """
+    Plot the results of the 3-SAT simulation with each variable on its own graph.
+    
+    Args:
+        analysis: The simulation results
+        variable_names: List of variable names
+    """
+    # Calculate the number of rows needed for the subplots
+    num_variables = len(variable_names)
+    
+    # Create a figure with subplots - one for each variable
+    fig, axes = plt.subplots(num_variables, 1, figsize=(12, 4 * num_variables), sharex=True)
+    
+    # If there's only one variable, axes won't be an array
+    if num_variables == 1:
+        axes = [axes]
+    
+    # Plot each variable on its own subplot
+    for i, name in enumerate(variable_names):
+        node_name = f'var_{name}'
+        ax = axes[i]
+        
+        # Check if the node exists in the analysis results
+        if node_name in analysis.nodes:
+            # Plot the variable voltage
+            ax.plot(analysis.time, analysis[node_name], label=f'Variable {name}', linewidth=2)
+            
+            # Add horizontal lines at 0.25V and 0.75V to indicate decision thresholds
+            ax.axhline(y=0.25, color='r', linestyle='--', alpha=0.5, label='False threshold (0.25V)')
+            ax.axhline(y=0.75, color='g', linestyle='--', alpha=0.5, label='True threshold (0.75V)')
+            
+            # Add a title and y-label for this subplot
+            ax.set_title(f'Variable {name}')
+            ax.set_ylabel('Voltage (V)')
+            ax.grid(True)
+            ax.legend()
+            
+            # Get the final voltage value
+            final_voltage = float(analysis[node_name][-1])
+            
+            # Determine the final state
+            if final_voltage > 0.75:
+                state = "TRUE"
+                color = 'green'
+            elif final_voltage < 0.25:
+                state = "FALSE"
+                color = 'red'
+            else:
+                state = "UNDECIDED"
+                color = 'orange'
+                
+            # Add text annotation showing the final state
+            ax.text(0.98, 0.95, f'Final state: {state} ({final_voltage:.3f}V)', 
+                    horizontalalignment='right',
+                    verticalalignment='top',
+                    transform=ax.transAxes,
+                    bbox=dict(facecolor=color, alpha=0.2))
+        else:
+            # If node not found, display an error message
+            print(f"Warning: Node '{node_name}' not found in analysis results")
+            ax.text(0.5, 0.5, f"Node '{node_name}' not found in analysis results",
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    transform=ax.transAxes,
+                    bbox=dict(facecolor='red', alpha=0.2))
+            
+            # List available nodes for debugging
+            print(f"Available nodes: {', '.join(analysis.nodes)}")
+    
+    # Add a common x-label for all subplots with proper formatting
+    plt.xlabel('Time (milliseconds)')
+    
+    # Format the x-axis ticks to show milliseconds
+    for ax in axes:
+        ax.set_xticklabels([f'{x*1000:.2f}' for x in ax.get_xticks()])
+    
+    # Adjust layout to prevent overlap
+    plt.tight_layout()
+    
+    # Save the plot
+    plt.savefig('graphs/3sat_results.png', dpi=300, bbox_inches='tight')
+    plt.show()
+
+
+def interpret_results(analysis, variable_names):
+    """
+    Interpret the results of the 3-SAT simulation.
+    
+    Args:
+        analysis: The simulation results
+        variable_names: List of variable names
+        
+    Returns:
+        A dictionary mapping variable names to boolean values
+    """
+    # Get the final voltage of each variable node
+    final_voltages = {}
+    for name in variable_names:
+        node_name = f'var_{name}'
+        final_voltage = float(analysis[node_name][-1])
+        final_voltages[name] = final_voltage
+    
+    # Interpret the voltages as boolean values
+    # If voltage > 0.75V, the variable is True
+    # If voltage < 0.25V, the variable is False
+    # Otherwise, the variable is undecided
+    results = {}
+    for name, voltage in final_voltages.items():
+        if voltage > 0.75:
+            results[name] = True
+        elif voltage < 0.25:
+            results[name] = False
+        else:
+            results[name] = None  # Undecided
+    
+    return results, final_voltages
+
+
+def main():
+    """
+    Main function to test the 3-SAT solver.
+    
+    The test problem is:
+    (a or b or c) and
+    (a or b or ¬c) and
+    (a or ¬b or c) and
+    (a or ¬b or ¬c) and
+    (¬a or b or c) and
+    (¬a or b or ¬c) and
+    (¬a or ¬b or c)
+    """
+    # Define the variables
+    variable_names = ['a', 'b', 'c']
+    
+    # Define the clauses
+    # Each clause is a list of 3 tuples (var_idx, is_negated)
+    # var_idx is the index in variable_names
+    # is_negated is True if the variable is negated
+    clauses = [
+        [(0, False), (1, False), (2, False)],  # (a or b or c)
+        [(0, False), (1, False), (2, True)],   # (a or b or ¬c)
+        [(0, False), (1, True), (2, False)],   # (a or ¬b or c)
+        [(0, False), (1, True), (2, True)],    # (a or ¬b or ¬c)
+        [(0, True), (1, False), (2, False)],   # (¬a or b or c)
+        [(0, True), (1, False), (2, True)],    # (¬a or b or ¬c)
+        [(0, True), (1, True), (2, True)],    # (¬a or ¬b or ¬c)
+    ]
+    
+    # Print the problem
+    print("3-SAT Problem:")
+    for i, clause in enumerate(clauses):
+        clause_str = " or ".join([
+            f"{'¬' if is_negated else ''}{variable_names[var_idx]}" 
+            for var_idx, is_negated in clause
+        ])
+        print(f"Clause {i+1}: ({clause_str})")
+    
+    # Create the circuit
+    circuit = create_3sat_circuit(clauses, variable_names)
+    
+    # Run the simulation
+    print("\nRunning simulation...")
+    analysis = run_3sat_simulation(circuit, variable_names)
+    
+    # Plot the results
+    plot_3sat_results(analysis, variable_names)
+    
+    # Interpret the results
+    results, final_voltages = interpret_results(analysis, variable_names)
+    
+    # Print the results
+    print("\nSimulation Results:")
+    print("------------------")
+    for name, value in results.items():
+        status = "True" if value else "False" if value is False else "Undecided"
+        print(f"Variable {name}: {status} (Voltage: {final_voltages[name]:.3f}V)")
+    
+    # Check if the assignment satisfies all clauses
+    satisfies_all = True
+    for i, clause in enumerate(clauses):
+        clause_satisfied = False
+        for var_idx, is_negated in clause:
+            var_name = variable_names[var_idx]
+            var_value = results[var_name]
+            if var_value is None:
+                continue  # Skip undecided variables
+            
+            # Check if this literal satisfies the clause
+            if (not is_negated and var_value) or (is_negated and not var_value):
+                clause_satisfied = True
+                break
+        
+        if not clause_satisfied:
+            satisfies_all = False
+            print(f"Clause {i+1} is not satisfied!")
+    
+    if satisfies_all:
+        print("\nThe assignment satisfies all clauses!")
+    else:
+        print("\nThe assignment does not satisfy all clauses.")
+
+
+if __name__ == '__main__':
+    # Set up logging
+    logger = Logging.setup_logging()
+    main()
