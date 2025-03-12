@@ -259,6 +259,7 @@ dependencies = [
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "pyspice" },
+    { name = "python-sat" },
 ]
 
 [package.metadata]
@@ -266,6 +267,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.1" },
     { name = "numpy", specifier = ">=2.2.3" },
     { name = "pyspice", specifier = ">=1.5" },
+    { name = "python-sat", specifier = ">=1.8.dev14" },
 ]
 
 [[package]]
@@ -408,6 +410,24 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892 },
+]
+
+[[package]]
+name = "python-sat"
+version = "1.8.dev14"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3e/44/92239f998dca4bff108e1feb824c53bbba6c9f87c6d3625268c3887cb302/python_sat-1.8.dev14.tar.gz", hash = "sha256:bbec9e329f2fc5b19b1517a9476b632dc1df39a755b29ddb805b78fad5f5d722", size = 5679262 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dd/c0/583388753778e772751a6d72114cc468353defb42b2c3afd1f5d0eab319e/python_sat-1.8.dev14-cp312-cp312-macosx_15_0_arm64.whl", hash = "sha256:c0110bb4a9f9528187f6475108172b61d1ed9196b100dbf861b642a855c62a7e", size = 1627463 },
+    { url = "https://files.pythonhosted.org/packages/73/49/ed026e9a8005b7189927e0caaee6e69ed3a5e8a7f0311d88394ae5c73c1e/python_sat-1.8.dev14-cp312-cp312-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:e171c9afffc033567d13e5c152bd5e2f0aca3c005112a56b7577d42d8ab5708d", size = 2789405 },
+    { url = "https://files.pythonhosted.org/packages/c7/f9/9a17439894fc4ce4ee091ebd9edd08ac273473973c384c8034220bd35f20/python_sat-1.8.dev14-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:c1f79884695bd04bc4b8e44c8d38dd5897a2723c33ee78de8bf403601c8a7840", size = 2739413 },
+    { url = "https://files.pythonhosted.org/packages/71/28/87d3a18cdddde1f22edccee85419589190e8b95511a8a0b374df1d84fede/python_sat-1.8.dev14-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e217d784c1ebe8508a335ca45e90e9cb308242c4c05b3f68f7efebc9229be2d7", size = 2739406 },
+    { url = "https://files.pythonhosted.org/packages/93/a8/977ccae6870a53ae9ae37b66876dbcf4fc538db54553604d5fd923b15e2b/python_sat-1.8.dev14-cp312-cp312-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:8ee41afa19f349cbb19834cdf1c7cc2f4b946d1cb78b3e94876a805aca9ba8f8", size = 2607422 },
+    { url = "https://files.pythonhosted.org/packages/1e/31/c10329e3e17cd36c1834d0d3477cb41dcd149ec88181f136be296696af9e/python_sat-1.8.dev14-cp312-cp312-win_amd64.whl", hash = "sha256:5a0442a56a0438f833af5699057f430b5aa39286ab33a60f1b0de023535df305", size = 1287269 },
+    { url = "https://files.pythonhosted.org/packages/fd/0f/26e6a1dfb84f8923327c0112f3da8379eb60cb667cf06dbf3eeacbc2d1d7/python_sat-1.8.dev14-cp313-cp313-macosx_15_0_arm64.whl", hash = "sha256:8528ccef025a78916bdc652c99db0d44181a6ba5a20b01161cd5d634c6b6eefb", size = 1627414 },
 ]
 
 [[package]]
