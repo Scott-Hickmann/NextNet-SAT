@@ -172,13 +172,15 @@ def run_3sat_simulation(circuit, variable_names, simulation_time=10, step_time=1
     return analysis
 
 
-def plot_3sat_results(analysis, variable_names, file_name):
+def plot_3sat_results(analysis, variable_names, file_name, show_plot=True):
     """
     Plot the results of the 3-SAT simulation with each variable on its own graph.
     
     Args:
         analysis: The simulation results
         variable_names: List of variable names
+        file_name: Base name for the output file (without extension)
+        show_plot: Whether to display the plot (default: True)
     """
     # Calculate the number of rows needed for the subplots
     num_variables = len(variable_names)
@@ -254,7 +256,12 @@ def plot_3sat_results(analysis, variable_names, file_name):
     
     # Save the plot
     plt.savefig(f'graphs/{file_name}.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    
+    # Only show the plot if requested
+    if show_plot:
+        plt.show()
+    else:
+        plt.close(fig)
 
 
 def interpret_results(analysis, variable_names):
