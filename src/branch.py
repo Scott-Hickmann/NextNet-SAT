@@ -24,31 +24,33 @@ class Branch(SubCircuit):
     - vdd: Power supply
     - gnd: Ground
     
-    The cmi2, cmi3, and cmi values are passed as constructor arguments.
+    The cmi2, cmi3, cmi values, and C parameter are passed as constructor arguments.
     """
     NODES = ('vi2', 'vi3', 'imi_pos', 'imi_neg', 'vdd', 'gnd')
     
-    def __init__(self, cmi=0, cmi2=0, cmi3=0):
+    def __init__(self, cmi, cmi2, cmi3, C):
         """
-        Initialize the complete branch subcircuit with specific cmi2, cmi3, and cmi values.
+        Initialize the complete branch subcircuit with specific cmi2, cmi3, cmi values, and capacitance.
         
         Args:
             cmi (int): The ternary control value (-1, 0, or 1) for the BranchCurrent
             cmi2 (int): The ternary control value (-1, 0, or 1) for the first multiplexer in BranchVoltage
             cmi3 (int): The ternary control value (-1, 0, or 1) for the second multiplexer in BranchVoltage
+            C (float): The capacitance value in Farads (default: 1pF)
         """
-        super().__init__(f'branch_{cmi2}_{cmi3}_{cmi}', *self.NODES)
+        super().__init__(f'branch_{cmi2}_{cmi3}_{cmi}_{C}', *self.NODES)
             
-        # Store cmi values to make the subcircuit name unique
+        # Store cmi values and C to make the subcircuit name unique
         self._cmi = cmi
         self._cmi2 = cmi2
         self._cmi3 = cmi3
+        self._C = C
         
         # Create and add the BranchVoltage subcircuit
         branch_voltage = BranchVoltage(cmi2=cmi2, cmi3=cmi3)
         
-        # Create and add the BranchCurrent subcircuit
-        branch_current = BranchCurrent(cmi=cmi)
+        # Create and add the BranchCurrent subcircuit with the C parameter
+        branch_current = BranchCurrent(cmi=cmi, C=C)
         
         # Add the subcircuits
         self.subcircuit(branch_voltage)
@@ -65,11 +67,11 @@ class Branch(SubCircuit):
 
 
 # Helper function to calculate the theoretical output based on the mathematical model
-def calculate_theoretical_output(vi2, vi3, cmi, cmi2, cmi3, vdd=1.0):
+def calculate_theoretical_output(vi2, vi3, cmi, cmi2, cmi3, C, vdd=1.0):
     """
     Calculate the theoretical output current based on the mathematical model:
     
-    I_mi = c_mi * (mux2_output) * (mux3_output)
+    I_mi = c_mi * (C/4) * (mux2_output) * (mux3_output)
     
     Where mux output depends on cmi value:
     - cmi2/cmi3 = 1: VDD - Vi
@@ -77,9 +79,9 @@ def calculate_theoretical_output(vi2, vi3, cmi, cmi2, cmi3, vdd=1.0):
     - cmi2/cmi3 = -1: Vi
     
     And the current conversion depends on cmi:
-    - cmi = 1: I_mi = V_mi
+    - cmi = 1: I_mi = V_mi * (C/4)
     - cmi = 0: I_mi = 0
-    - cmi = -1: I_mi = -V_mi
+    - cmi = -1: I_mi = -V_mi * (C/4)
     
     Args:
         vi2: Input voltage 2
@@ -87,6 +89,7 @@ def calculate_theoretical_output(vi2, vi3, cmi, cmi2, cmi3, vdd=1.0):
         cmi2: Control value for multiplexer 2
         cmi3: Control value for multiplexer 3
         cmi: Control value for current converter
+        C: Capacitance value in Farads
         vdd: Supply voltage (default 1.0V)
         
     Returns:
@@ -108,8 +111,11 @@ def calculate_theoretical_output(vi2, vi3, cmi, cmi2, cmi3, vdd=1.0):
     else:  # cmi3 == -1
         mux3_out = vi3
     
-    # Return the product
-    return cmi * mux2_out * mux3_out
+    # Calculate intermediate voltage (Vmi)
+    vmi = mux2_out * mux3_out
+    
+    # Apply the current conversion with C/4 scaling factor
+    return cmi * (C / 4) * vmi
 
 
 # Test the complete branch subcircuit
@@ -135,13 +141,16 @@ def main():
         (-1, 1, -1),    # Mixed correlations
     ]
     
+    # Set capacitance value
+    C = 1e-9  # 1 nF
+    
     # Create and test each branch
     results = []
     labels = []
     
     for idx, (cmi, cmi2, cmi3) in enumerate(cmi_combinations):
         # Create the complete branch subcircuit
-        branch = Branch(cmi=cmi, cmi2=cmi2, cmi3=cmi3)
+        branch = Branch(cmi=cmi, cmi2=cmi2, cmi3=cmi3, C=C)
         circuit.subcircuit(branch)
         
         # Add measurement resistor (1 ohm) to convert current to voltage for measurement
@@ -200,7 +209,7 @@ def main():
                            color=color, label=f'Simulated: cmi={cmi}, cmi2={cmi2}, cmi3={cmi3}')
         
         # Calculate and plot theoretical results with matching color
-        theoretical = [calculate_theoretical_output(v, 0, cmi, cmi2, cmi3, vdd) for v in v_sweep]
+        theoretical = [calculate_theoretical_output(v, 0, cmi, cmi2, cmi3, C, vdd) for v in v_sweep]
         ax.plot(v_sweep, theoretical, '--', color=color, 
                label=f'Theoretical: cmi={cmi}, cmi2={cmi2}, cmi3={cmi3}')
     
@@ -220,7 +229,7 @@ def main():
                color=color, label=f'Simulated: cmi={cmi}, cmi2={cmi2}, cmi3={cmi3}')
         
         # Calculate and plot theoretical results with matching color
-        theoretical = [calculate_theoretical_output(v, vdd, cmi, cmi2, cmi3, vdd) for v in v_sweep]
+        theoretical = [calculate_theoretical_output(v, vdd, cmi, cmi2, cmi3, C, vdd) for v in v_sweep]
         ax.plot(v_sweep, theoretical, '--', color=color, 
                label=f'Theoretical: cmi={cmi}, cmi2={cmi2}, cmi3={cmi3}')
     
@@ -240,7 +249,7 @@ def main():
                color=color, label=f'Simulated: cmi={cmi}, cmi2={cmi2}, cmi3={cmi3}')
         
         # Calculate and plot theoretical results with matching color
-        theoretical = [calculate_theoretical_output(0, v, cmi, cmi2, cmi3, vdd) for v in v_sweep]
+        theoretical = [calculate_theoretical_output(0, v, cmi, cmi2, cmi3, C, vdd) for v in v_sweep]
         ax.plot(v_sweep, theoretical, '--', color=color, 
                label=f'Theoretical: cmi={cmi}, cmi2={cmi2}, cmi3={cmi3}')
     
@@ -260,7 +269,7 @@ def main():
                color=color, label=f'Simulated: cmi={cmi}, cmi2={cmi2}, cmi3={cmi3}')
         
         # Calculate and plot theoretical results with matching color
-        theoretical = [calculate_theoretical_output(vdd, v, cmi, cmi2, cmi3, vdd) for v in v_sweep]
+        theoretical = [calculate_theoretical_output(vdd, v, cmi, cmi2, cmi3, C, vdd) for v in v_sweep]
         ax.plot(v_sweep, theoretical, '--', color=color, 
                label=f'Theoretical: cmi={cmi}, cmi2={cmi2}, cmi3={cmi3}')
     
@@ -292,7 +301,7 @@ def main():
             test_circuit.V('i3', 'vi3', test_circuit.gnd, vi3@u_V)
             
             # Create and add the complete branch subcircuit
-            branch = Branch(cmi=cmi, cmi2=cmi2, cmi3=cmi3)
+            branch = Branch(cmi=cmi, cmi2=cmi2, cmi3=cmi3, C=C)
             test_circuit.subcircuit(branch)
             
             # Add measurement resistor (1 ohm) to convert current to voltage for measurement
@@ -306,13 +315,15 @@ def main():
             analysis = test_simulator.operating_point()
             
             # Calculate theoretical output based on mathematical model
-            theoretical_current = calculate_theoretical_output(vi2, vi3, cmi, cmi2, cmi3, vdd)
+            theoretical_current = calculate_theoretical_output(vi2, vi3, cmi, cmi2, cmi3, C, vdd)
             
             # Extract output current (voltage across 1 ohm resistor equals current in amps)
             output_current = float(analysis['out'])
             
-            print(f"vi2={vi2}V, vi3={vi3}V => Output Current = {output_current:.6f}A (Theoretical: {theoretical_current:.6f}A)")
-            assert abs(output_current - theoretical_current) < 1e-6, "Output current does not match theoretical current"
+            print(f"vi2={vi2}V, vi3={vi3}V => Output Current = {output_current:.3e}A (Theoretical: {theoretical_current:.3e}A)")
+            error = abs(output_current - theoretical_current)
+            print(f"  Error: {error:.3e}A")
+            assert error < 1e-12, "Output current does not match theoretical current"
 
 if __name__ == '__main__':
     # Set up logging

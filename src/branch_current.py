@@ -8,11 +8,11 @@ import numpy as np
 class BranchCurrent(SubCircuit):
     """
     A voltage-to-current converter subcircuit that converts an input voltage Vmi
-    into a current Imi where Imi = cmi*Vmi.
+    into a current Imi where Imi = cmi*Vmi*(C/4).
     
     The circuit takes an input voltage (Vmi) and produces a current (Imi) that is
     proportional to the input voltage, with the proportionality constant determined
-    by the cmi value.
+    by the cmi value and scaled by C/4.
     
     Nodes:
     - vmi: Input voltage
@@ -22,33 +22,38 @@ class BranchCurrent(SubCircuit):
     - gnd: Ground
     
     The cmi value is passed as a constructor argument and must be -1, 0, or 1:
-    - When cmi = 1: Imi = Vmi (positive correlation)
+    - When cmi = 1: Imi = Vmi*(C/4) (positive correlation)
     - When cmi = 0: Imi = 0 (no current)
-    - When cmi = -1: Imi = -Vmi (negative correlation)
+    - When cmi = -1: Imi = -Vmi*(C/4) (negative correlation)
     """
     NODES = ('vmi', 'imi_pos', 'imi_neg', 'vdd', 'gnd')
     
-    def __init__(self, cmi=0):
+    def __init__(self, cmi, C):
         """
-        Initialize the voltage-to-current converter with a specific cmi value.
+        Initialize the voltage-to-current converter with a specific cmi value and capacitance.
         
         Args:
             cmi (int): The ternary control value (-1, 0, or 1)
+            C (float): The capacitance value in Farads (default: 1pF)
         """
-        super().__init__(f'branch_current_{cmi}', *self.NODES)
+        super().__init__(f'branch_current_{cmi}_{C}', *self.NODES)
         
         # Validate cmi value
         if cmi not in [-1, 0, 1]:
             raise ValueError("cmi must be -1, 0, or 1")
             
-        # Store cmi value to make the subcircuit name unique
+        # Store cmi and C values to make the subcircuit name unique
         self._cmi = cmi
+        self._C = C
+        
+        # Calculate the transconductance (C/4)
+        transconductance = C / 4
         
         # CASE 1: Positive correlation (when cmi = 1)
         if cmi == 1:
             # Create a voltage-controlled current source with positive gain
-            # Current flows from imi_pos to imi_neg proportional to Vmi
-            self.VCCS('vccs', 'imi_pos', 'imi_neg', 'gnd', 'vmi', transconductance=1)
+            # Current flows from imi_pos to imi_neg proportional to Vmi*(C/4)
+            self.VCCS('vccs', 'imi_pos', 'imi_neg', 'gnd', 'vmi', transconductance=transconductance)
         
         # CASE 2: No current (when cmi = 0)
         elif cmi == 0:
@@ -59,8 +64,8 @@ class BranchCurrent(SubCircuit):
         # CASE 3: Negative correlation (when cmi = -1)
         elif cmi == -1:
             # Create a voltage-controlled current source with negative gain
-            # Current flows from imi_pos to imi_neg proportional to -Vmi
-            self.VCCS('vccs', 'imi_pos', 'imi_neg', 'vmi', 'gnd', transconductance=1)
+            # Current flows from imi_pos to imi_neg proportional to -Vmi*(C/4)
+            self.VCCS('vccs', 'imi_pos', 'imi_neg', 'vmi', 'gnd', transconductance=transconductance)
 
 
 # Test the voltage-to-current converter
@@ -80,9 +85,10 @@ def main():
     labels = []
     
     # Create three different current converters with different cmi values
-    converter1 = BranchCurrent(cmi=1)
-    converter0 = BranchCurrent(cmi=0)
-    converter_neg1 = BranchCurrent(cmi=-1)
+    C = 1e-9
+    converter1 = BranchCurrent(cmi=1, C=C)
+    converter0 = BranchCurrent(cmi=0, C=C)
+    converter_neg1 = BranchCurrent(cmi=-1, C=C)
     
     # Add the subcircuits to the circuit
     circuit.subcircuit(converter1)
@@ -115,9 +121,9 @@ def main():
     ]
     
     labels = [
-        'cmi = 1 (Imi = Vmi)',
+        'cmi = 1 (Imi = Vmi*(C/4))',
         'cmi = 0 (Imi = 0)',
-        'cmi = -1 (Imi = -Vmi)'
+        'cmi = -1 (Imi = -Vmi*(C/4))'
     ]
     
     # Plot the results
@@ -132,9 +138,12 @@ def main():
     
     # Add ideal response lines for comparison
     x = np.linspace(0, vdd, 101)
-    plt.plot(x, x, 'k--', alpha=0.5, label='Ideal: I = V')
+    # Calculate the scaling factor C/4
+    scaling_factor = C / 4
+    # Use the correct scaling factor for ideal response lines
+    plt.plot(x, x * scaling_factor, 'k--', alpha=0.5, label=f'Ideal: I = V*(C/4) = V*{scaling_factor:.2e}')
     plt.plot(x, np.zeros_like(x), 'k--', alpha=0.5, label='Ideal: I = 0')
-    plt.plot(x, -x, 'k--', alpha=0.5, label='Ideal: I = -V')
+    plt.plot(x, -x * scaling_factor, 'k--', alpha=0.5, label=f'Ideal: I = -V*(C/4) = -V*{scaling_factor:.2e}')
     
     plt.legend()
     plt.tight_layout()
@@ -162,7 +171,7 @@ def main():
             test_circuit.V('in', 'vmi', test_circuit.gnd, test_v@u_V)
             
             # Create and add the converter subcircuit
-            converter = BranchCurrent(cmi=cmi_value)
+            converter = BranchCurrent(cmi=cmi_value, C=C)
             test_circuit.subcircuit(converter)
             
             # Add measurement resistor (1 ohm) to convert current to voltage for measurement
@@ -176,13 +185,13 @@ def main():
             analysis = test_simulator.operating_point()
             
             # Calculate ideal output current and error
-            ideal_current = test_v * cmi_value  # This directly implements Imi = cmi*Vmi
+            ideal_current = test_v * cmi_value * (C / 4)  # This directly implements Imi = cmi*Vmi*(C/4)
             
             # Extract output current (voltage across 1 ohm resistor equals current in amps)
             output_current = float(analysis['out_high'])
             error = abs(output_current - ideal_current)
             
-            print(f"Input = {test_v:.2f}V => Output = {output_current:.3f}A (Ideal: {ideal_current:.3f}A, Error: {error:.3f}A)") 
+            print(f"Input = {test_v:.2f}V => Output = {output_current:.3e}A (Ideal: {ideal_current:.3e}A, Error: {error:.3e}A)")
 
 if __name__ == '__main__':
     # Set up logging

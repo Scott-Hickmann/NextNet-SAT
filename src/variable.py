@@ -17,24 +17,24 @@ class Variable(SubCircuit):
     - vi: Input voltage node (variable state)
     - gnd: Ground
     
-    The capacitance value is passed as a constructor argument.
+    The C value is passed as a constructor argument.
     """
     NODES = ('vi', 'gnd')
     
-    def __init__(self, capacitance=1e-12):
+    def __init__(self, C):
         """
         Initialize the variable subcircuit with a specific capacitance value.
         
         Args:
-            capacitance (float): The capacitance value in Farads (default: 1pF)
+            C (float): The capacitance value in Farads (default: 1pF)
         """
-        super().__init__(f'variable_{capacitance}', *self.NODES)
+        super().__init__(f'variable_{C}', *self.NODES)
         
         # Store capacitance value to make the subcircuit name unique
-        self._capacitance = capacitance
+        self._C = C
         
         # Add a capacitor from vi to ground
-        self.C(1, 'vi', 'gnd', capacitance@u_F)
+        self.C(1, 'vi', 'gnd', C@u_F)
 
 
 def main():
@@ -47,11 +47,11 @@ def main():
     circuit.V('dd', 'vdd', circuit.gnd, 1@u_V)
     
     # Create variable subcircuits with different capacitance values
-    capacitance_values = [1e-12, 10e-12, 100e-12]  # 1pF, 10pF, 100pF
+    C_values = [1e-12, 10e-12, 100e-12]  # 1pF, 10pF, 100pF
     variables = []
     
-    for i, cap in enumerate(capacitance_values):
-        var = Variable(capacitance=cap)
+    for i, cap in enumerate(C_values):
+        var = Variable(C=cap)
         variables.append(var)
         circuit.subcircuit(var)
         
@@ -78,21 +78,21 @@ def main():
     
     # Plot the results
     plt.figure(figsize=(10, 6))
-    plt.title('Variable Charging Behavior with Different Capacitance Values')
+    plt.title('Variable Charging Behavior with Different C Values')
     plt.xlabel('Time [s]')
     plt.ylabel('Voltage [V]')
     plt.grid(True)
     
-    # Plot the charging curves for each capacitance value
-    colors = plt.cm.viridis(np.linspace(0, 0.8, len(capacitance_values)))
+    # Plot the charging curves for each C value
+    colors = plt.cm.viridis(np.linspace(0, 0.8, len(C_values)))
     
-    for i, cap in enumerate(capacitance_values):
+    for i, cap in enumerate(C_values):
         node_name = f'vi_{i}'
         plt.plot(analysis.time, analysis[node_name], 
                  color=colors[i], label=f'C = {cap*1e12:.0f} pF')
     
     # Calculate and plot theoretical charging curves
-    for i, cap in enumerate(capacitance_values):
+    for i, cap in enumerate(C_values):
         # For a simple RC circuit with R=0 (ideal voltage source), 
         # the capacitor would charge instantly
         # But in practice, there's always some resistance in the circuit
@@ -120,11 +120,11 @@ def main():
     print("This can be used to model a variable or state in a neural network.")
     print("The voltage on the capacitor (between 0V and 1V) represents the state.")
     
-    # Calculate and print the time constants for each capacitance value
+    # Calculate and print the time constants for each C value
     print("\nTime Constants (assuming 1kΩ resistance):")
-    for cap in capacitance_values:
+    for cap in C_values:
         tau = 1e3 * cap  # Time constant with 1kΩ resistance
-        print(f"C = {cap*1e12:.0f} pF: τ = {tau*1e9:.2f} ns") 
+        print(f"C = {cap*1e12:.0f} pF: τ = {tau*1e9:.2f} ns")
 
 
 # Test the Variable subcircuit
