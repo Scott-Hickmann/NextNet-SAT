@@ -1,9 +1,69 @@
 import PySpice.Logging.Logging as Logging
 from PySpice.Spice.Netlist import Circuit
 import matplotlib.pyplot as plt
+import argparse
+import os
+from pysat.formula import CNF
 
 from clause import Clause
 from variable import Variable
+
+
+def load_cnf_file(cnf_file_path):
+    """
+    Load a CNF file using the pysat library.
+    
+    Args:
+        cnf_file_path: Path to the CNF file
+        
+    Returns:
+        A tuple containing (clauses, variable_names) where:
+        - clauses is a list of clauses, each clause is a list of 3 tuples (var_idx, is_negated)
+        - variable_names is a list of variable names
+    """
+    # Check if the file exists
+    if not os.path.isfile(cnf_file_path):
+        raise FileNotFoundError(f"CNF file not found: {cnf_file_path}")
+    
+    # Load the CNF formula using pysat
+    cnf_formula = CNF(from_file=cnf_file_path)
+    
+    # Extract the number of variables
+    num_vars = cnf_formula.nv
+    
+    # Create variable names (x1, x2, x3, ...)
+    variable_names = [f'x{i}' for i in range(1, num_vars + 1)]
+    
+    # Convert pysat clauses to our format
+    # pysat format: list of lists where each inner list contains integers
+    # positive integers represent positive literals, negative integers represent negative literals
+    # e.g., [1, -2, 3] means (x1 OR NOT x2 OR x3)
+    clauses = []
+    
+    for pysat_clause in cnf_formula.clauses:
+        # For 3-SAT, each clause should have exactly 3 literals
+        # If a clause has fewer than 3 literals, we'll pad it with the first literal
+        # If a clause has more than 3 literals, we'll only use the first 3
+        
+        # Ensure we have at least one literal
+        if not pysat_clause:
+            continue
+            
+        # Convert to our format: [(var_idx, is_negated), ...]
+        clause = []
+        for literal in pysat_clause[:3]:  # Take only the first 3 literals
+            var_idx = abs(literal) - 1  # Convert from 1-indexed to 0-indexed
+            is_negated = literal < 0
+            clause.append((var_idx, is_negated))
+        
+        # Pad if necessary to ensure exactly 3 literals
+        while len(clause) < 3:
+            # Duplicate the first literal
+            clause.append(clause[0])
+            
+        clauses.append(clause)
+    
+    return clauses, variable_names
 
 
 def create_3sat_circuit(clauses, variable_names):
@@ -233,33 +293,21 @@ def interpret_results(analysis, variable_names):
 
 def main():
     """
-    Main function to test the 3-SAT solver.
-    
-    The test problem is:
-    (a or b or c) and
-    (a or b or ¬c) and
-    (a or ¬b or c) and
-    (a or ¬b or ¬c) and
-    (¬a or b or c) and
-    (¬a or b or ¬c) and
-    (¬a or ¬b or c)
+    Main function to solve a 3-SAT problem from a CNF file.
     """
-    # Define the variables
-    variable_names = ['a', 'b', 'c']
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description='Solve a 3-SAT problem using an analog circuit simulator.')
+    parser.add_argument('--cnf', type=str, help='Path to the CNF file')
+    parser.add_argument('--sim-time', type=float, default=10, help='Simulation time in seconds')
+    parser.add_argument('--step-time', type=float, default=1e-3, help='Simulation step time in seconds')
+    args = parser.parse_args()
     
-    # Define the clauses
-    # Each clause is a list of 3 tuples (var_idx, is_negated)
-    # var_idx is the index in variable_names
-    # is_negated is True if the variable is negated
-    clauses = [
-        [(0, False), (1, False), (2, False)],  # (a or b or c)
-        [(0, False), (1, False), (2, True)],   # (a or b or ¬c)
-        [(0, False), (1, True), (2, False)],   # (a or ¬b or c)
-        [(0, False), (1, True), (2, True)],    # (a or ¬b or ¬c)
-        [(0, True), (1, False), (2, False)],   # (¬a or b or c)
-        [(0, True), (1, False), (2, True)],    # (¬a or b or ¬c)
-        [(0, True), (1, True), (2, True)],    # (¬a or ¬b or ¬c)
-    ]
+    # If no CNF file is provided, use the default example
+    if args.cnf:
+        print(f"Loading CNF file: {args.cnf}")
+        clauses, variable_names = load_cnf_file(args.cnf)
+    else:
+        raise ValueError("No CNF file provided")
     
     # Print the problem
     print("3-SAT Problem:")
@@ -275,7 +323,9 @@ def main():
     
     # Run the simulation
     print("\nRunning simulation...")
-    analysis = run_3sat_simulation(circuit, variable_names)
+    analysis = run_3sat_simulation(circuit, variable_names, 
+                                  simulation_time=args.sim_time, 
+                                  step_time=args.step_time)
     
     # Plot the results
     plot_3sat_results(analysis, variable_names)
