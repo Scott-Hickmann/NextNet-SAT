@@ -172,7 +172,7 @@ def run_3sat_simulation(circuit, variable_names, simulation_time=10, step_time=1
     return analysis
 
 
-def plot_3sat_results(analysis, variable_names):
+def plot_3sat_results(analysis, variable_names, file_name):
     """
     Plot the results of the 3-SAT simulation with each variable on its own graph.
     
@@ -253,7 +253,7 @@ def plot_3sat_results(analysis, variable_names):
     plt.tight_layout()
     
     # Save the plot
-    plt.savefig('graphs/3sat_results.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'graphs/{file_name}.png', dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -281,12 +281,16 @@ def interpret_results(analysis, variable_names):
     # Otherwise, the variable is undecided
     results = {}
     for name, voltage in final_voltages.items():
-        if voltage > 0.75:
+        # if voltage > 0.75:
+        #     results[name] = True
+        # elif voltage < 0.25:
+        #     results[name] = False
+        # else:
+        #     results[name] = None  # Undecided
+        if voltage > 0.5:
             results[name] = True
-        elif voltage < 0.25:
-            results[name] = False
         else:
-            results[name] = None  # Undecided
+            results[name] = False
     
     return results, final_voltages
 
@@ -328,7 +332,7 @@ def main():
                                   step_time=args.step_time)
     
     # Plot the results
-    plot_3sat_results(analysis, variable_names)
+    plot_3sat_results(analysis, variable_names, args.cnf.split("/")[-1].split(".")[0])
     
     # Interpret the results
     results, final_voltages = interpret_results(analysis, variable_names)
