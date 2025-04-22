@@ -21,45 +21,56 @@ class AMCircuit(SubCircuit):
     AM Circuit subcircuit that implements a positive feedback oscillator.
     
     This circuit uses an operational amplifier with two capacitors of capacitance C,
-    and two resistors of resistance R, configured to produce exponential growth in the output voltage.
+    but exposes nodes for external resistive components to be connected.
     
     Nodes:
     - vout: Output voltage of the circuit
+    - r1_a: First terminal for external resistive component 1 (connected to vout)
+    - r1_b: Second terminal for external resistive component 1 (connected to op_plus)
+    - r2_a: First terminal for external resistive component 2 (connected to op_minus)
+    - r2_b: Second terminal for external resistive component 2 (connected to gnd)
     - vdd: Positive power supply
     - vss: Negative power supply
     - gnd: Ground reference
     - op_plus: Non-inverting input of the op-amp (exposed for measurement)
     - op_minus: Inverting input of the op-amp (exposed for measurement)
     """
-    NODES = ('vout', 'vdd', 'vss', 'gnd', 'op_plus', 'op_minus')
+    NODES = ('vout', 'r1_a', 'r1_b', 'r2_a', 'r2_b', 'vdd', 'vss', 'gnd', 'op_plus', 'op_minus')
     
-    def __init__(self, R=100e3, C=0.01e-6):
+    def __init__(self, C=0.01e-6):
         """
-        Initialize the AM circuit subcircuit with specific resistance and capacitance values.
+        Initialize the AM circuit subcircuit with specific capacitance value.
         
         Args:
-            R (float): Resistance value in ohms (default: 100kΩ)
             C (float): Capacitance value in farads (default: 0.01μF)
         """
-        super().__init__(f'AMCircuit_{R}_{C}', *self.NODES)
+        super().__init__(f'AMCircuit_{C}', *self.NODES)
             
         # Store component values
-        self._R = R
         self._C = C
         
         # Add the opamp subcircuit
         self.subcircuit(BasicOperationalAmplifier())
         
-        # Add resistors and capacitors - now connecting to the exposed op_plus and op_minus nodes
-        self.R('1', 'vout', 'op_plus', R@u_Ω)
-        self.R('2', 'op_minus', 'gnd', R@u_Ω)
+        # Connect vout to r1_a (to be connected to external resistive component)
+        self.R('vout_to_r1a', 'vout', 'r1_a', 0.001@u_Ω)  # Very small resistor as a wire
         
+        # Connect r1_b to op_plus
+        self.R('r1b_to_op_plus', 'r1_b', 'op_plus', 0.001@u_Ω)  # Very small resistor as a wire
+        
+        # Connect r2_a to op_minus
+        self.R('r2a_to_op_minus', 'r2_a', 'op_minus', 0.001@u_Ω)  # Very small resistor as a wire
+
+        # Connect r2_b to gnd
+        self.R('r2b_to_gnd', 'r2_b', 'gnd', 0.001@u_Ω)  # Very small resistor as a wire
+        
+        # Add capacitors
         self.C('1', 'op_minus', 'gnd', C@u_F)
         self.C('2', 'op_plus', 'gnd', C@u_F)
         
         # Instantiate the opamp
         self.X('opamp', 'BasicOperationalAmplifier', 
-             'op_plus', 'op_minus', 'vout', 'vdd', 'vss')
+              'op_plus', 'op_minus', 'vout', 'vdd', 'vss')
 
 
 def simulate_am_circuit():
@@ -80,11 +91,15 @@ def simulate_am_circuit():
     circuit.V('ss', 'vss', circuit.gnd, Vss@u_V)
     
     # Create the AM circuit subcircuit
-    am = AMCircuit(R=R, C=C)
+    am = AMCircuit(C=C)
     circuit.subcircuit(am)
     
-    # Instantiate the AM circuit - now including the exposed op nodes
-    circuit.X('am', am.name, 'vam', 'vdd', 'vss', circuit.gnd, 'op_plus', 'op_minus')
+    # Instantiate the AM circuit
+    circuit.X('am', am.name, 'vam', 'r1_a', 'r1_b', 'r2_a', 'r2_b', 'vdd', 'vss', circuit.gnd, 'op_plus', 'op_minus')
+    
+    # Add external resistive components (standard resistors in this case)
+    circuit.R('1', 'r1_a', 'r1_b', R@u_Ω)  # External resistor between vout and op_plus
+    circuit.R('2', 'r2_a', 'r2_b', R@u_Ω)  # External resistor between op_minus and gnd
     
     # Add initial condition to kickstart oscillation
     circuit.PulseVoltageSource('kick', 'kick', circuit.gnd,
@@ -96,7 +111,7 @@ def simulate_am_circuit():
                                rise_time=1@u_us,
                                fall_time=1@u_us)
     
-    # Connect the kick source to the op_plus node directly now that it's exposed
+    # Connect the kick source to the op_plus node
     circuit.R('kick', 'kick', 'op_plus', 1@u_kΩ)
     
     # Create simulator
