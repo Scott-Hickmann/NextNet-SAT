@@ -1,5 +1,5 @@
 import PySpice.Logging.Logging as Logging
-from PySpice.Spice.Netlist import Circuit
+from PySpice.Spice.Netlist import Circuit, SubCircuit
 from PySpice.Unit import u_V, u_kΩ, u_Ω, u_ms, u_us, u_F
 import matplotlib.pyplot as plt
 import numpy as np
@@ -15,65 +15,89 @@ def effective_gain(A0, wp, R, C):
     lam = mp.findroot(eqn, 1/(R*C))      # good initial guess
     return float(lam), float(lam*R*C)
 
-def create_am_circuit():
+
+class AMCircuit(SubCircuit):
     """
-    Create an AM circuit with an opamp, two capacitors of capacitance C,
-    and two resistors of resistance R, configured as a positive feedback oscillator.
+    AM Circuit subcircuit that implements a positive feedback oscillator.
     
-    This configuration will produce exponential growth in the output voltage.
+    This circuit uses an operational amplifier with two capacitors of capacitance C,
+    and two resistors of resistance R, configured to produce exponential growth in the output voltage.
+    
+    Nodes:
+    - vout: Output voltage of the circuit
+    - vdd: Positive power supply
+    - vss: Negative power supply
+    - gnd: Ground reference
+    - op_plus: Non-inverting input of the op-amp (exposed for measurement)
+    - op_minus: Inverting input of the op-amp (exposed for measurement)
+    """
+    NODES = ('vout', 'vdd', 'vss', 'gnd', 'op_plus', 'op_minus')
+    
+    def __init__(self, R=100e3, C=0.01e-6):
+        """
+        Initialize the AM circuit subcircuit with specific resistance and capacitance values.
+        
+        Args:
+            R (float): Resistance value in ohms (default: 100kΩ)
+            C (float): Capacitance value in farads (default: 0.01μF)
+        """
+        super().__init__(f'AMCircuit_{R}_{C}', *self.NODES)
+            
+        # Store component values
+        self._R = R
+        self._C = C
+        
+        # Add the opamp subcircuit
+        self.subcircuit(BasicOperationalAmplifier())
+        
+        # Add resistors and capacitors - now connecting to the exposed op_plus and op_minus nodes
+        self.R('1', 'vout', 'op_plus', R@u_Ω)
+        self.R('2', 'op_minus', 'gnd', R@u_Ω)
+        
+        self.C('1', 'op_minus', 'gnd', C@u_F)
+        self.C('2', 'op_plus', 'gnd', C@u_F)
+        
+        # Instantiate the opamp
+        self.X('opamp', 'BasicOperationalAmplifier', 
+             'op_plus', 'op_minus', 'vout', 'vdd', 'vss')
+
+
+def simulate_am_circuit():
+    """
+    Simulate the AM circuit and plot the output.
     """
     # Create a circuit
-    circuit = Circuit('AM Circuit')
+    circuit = Circuit('AM Circuit Simulation')
     
-    # Add the opamp subcircuit
-    circuit.subcircuit(BasicOperationalAmplifier())
-    
-    # Define component values - carefully tuned for proper oscillation
-    R = 100e3@u_Ω     # Feedback resistor
-    C = 0.01e-6@u_F     # 0.01 μF capacitors - smaller for faster response
+    # Define component values
+    R = 100e3
+    C = 0.01e-6
     
     # Add power supplies
-    Vdd = 1.0    # Increased supply voltage for wider swing
-    Vss = -1.0   # Negative supply to allow for negative swing
+    Vdd = 1.0
+    Vss = -1.0
     circuit.V('dd', 'vdd', circuit.gnd, Vdd@u_V)
     circuit.V('ss', 'vss', circuit.gnd, Vss@u_V)
     
-    # Define nodes
-    op_plus = 'op_plus'    # Non-inverting input of opamp
-    op_minus = 'op_minus'  # Inverting input of opamp
-    vam = 'vam'            # Output of opamp
+    # Create the AM circuit subcircuit
+    am = AMCircuit(R=R, C=C)
+    circuit.subcircuit(am)
     
-    circuit.R('1', vam, op_plus, R)
-    circuit.R('2', op_minus, circuit.gnd, R)
-
-    circuit.C('1', op_minus, circuit.gnd, C)
-    circuit.C('2', op_plus, circuit.gnd, C)
-    
-    # Instantiate the opamp
-    circuit.X('opamp', 'BasicOperationalAmplifier', 
-              op_plus, op_minus, vam, 'vdd', 'vss')
+    # Instantiate the AM circuit - now including the exposed op nodes
+    circuit.X('am', am.name, 'vam', 'vdd', 'vss', circuit.gnd, 'op_plus', 'op_minus')
     
     # Add initial condition to kickstart oscillation
     circuit.PulseVoltageSource('kick', 'kick', circuit.gnd,
                                initial_value=0@u_V,
-                               pulsed_value=0.1@u_V,  # Stronger pulse
+                               pulsed_value=0.1@u_V,
                                pulse_width=10@u_us,
                                period=1@u_ms,
                                delay_time=0@u_us,
                                rise_time=1@u_us,
                                fall_time=1@u_us)
     
-    # Connect the kick source directly to the non-inverting input
-    circuit.R('kick', 'kick', op_plus, 1@u_kΩ)  # Lower resistance for stronger effect
-    
-    return circuit, R.value, C.value
-
-def simulate_am_circuit():
-    """
-    Simulate the AM circuit and plot the output.
-    """
-    # Create the circuit and get component values
-    circuit, R, C = create_am_circuit()
+    # Connect the kick source to the op_plus node directly now that it's exposed
+    circuit.R('kick', 'kick', 'op_plus', 1@u_kΩ)
     
     # Create simulator
     simulator = circuit.simulator(temperature=25, nominal_temperature=25)
@@ -92,8 +116,8 @@ def simulate_am_circuit():
     # Extract time and output voltage
     time = np.array(analysis.time)
     vam = np.array(analysis['vam'])
-    op_plus = np.array(analysis['op_plus'])
-    op_minus = np.array(analysis['op_minus'])
+    op_plus = np.array(analysis['op_plus'])  # Now accessing the direct node
+    op_minus = np.array(analysis['op_minus'])  # Now accessing the direct node
     
     # Calculate exponential growth rate directly from the simulation data
     # First, find a section with clear exponential growth
@@ -131,13 +155,10 @@ def simulate_am_circuit():
     
     # Compare with formula-based estimate
     # For positive feedback amplifier, theoretical growth rate approximation
-
     wp = 2*np.pi*100 # rad/s   (pole frequency in the opamp sub‑circuit)
     A0 = 1e5 # DC open‑loop gain
     lam, Aeff = effective_gain(A0, wp, R, C)
     lam_Hz = lam / (2 * np.pi)
-    # print(f"Theoretical Aeff: {Aeff}")
-
     
     theoretical_growth_rate = lam_Hz
     print(f"Theoretical growth rate: {R} {C} {R * C} {theoretical_growth_rate:.2f} Hz")
