@@ -1,6 +1,6 @@
 import PySpice.Logging.Logging as Logging
 from PySpice.Spice.Netlist import Circuit, SubCircuitFactory
-from PySpice.Unit import u_V, u_Ohm, u_A
+from PySpice.Unit import u_V, u_Ohm
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -27,16 +27,16 @@ class TransmissionGate(SubCircuitFactory):
         
         # Define the NMOS and PMOS models with parameters
         # Using improved parameters for both transistors with realistic threshold voltages
-        self.model('NMOS', 'NMOS', vto=0, kp=2e-4, lambda_=0.01)  # Positive threshold for NMOS
-        self.model('PMOS', 'PMOS', vto=0, kp=2e-4, lambda_=0.01)  # Negative threshold for PMOS
+        self.model('NMOS', 'NMOS', vto=0, kp=1e-3, lambda_=0.01)  # Positive threshold for NMOS
+        self.model('PMOS', 'PMOS', vto=0, kp=1e-3, lambda_=0.01)  # Negative threshold for PMOS
         
         # NMOS transistor (passes when enable is high)
         # Proper connection order: drain, gate, source, body
-        self.M(1, 'output', 'enable', 'input', 'gnd', model='NMOS', l=1e-6, w=5e-6)
+        self.M(1, 'output', 'enable', 'input', 'gnd', model='NMOS')
         
         # PMOS transistor (passes when enable_bar is low)
         # Proper connection order: drain, gate, source, body
-        self.M(2, 'output', 'enable_bar', 'input', 'vdd', model='PMOS', l=1e-6, w=5e-6)
+        self.M(2, 'output', 'enable_bar', 'input', 'vdd', model='PMOS')
 
 
 def test_resistive_behavior():
@@ -232,10 +232,6 @@ def test_enable_sweep():
         if (output_voltages[i] > 0.1 and output_voltages[i-1] < 0.1) or \
            (output_voltages[i] > 0.4 and output_voltages[i-1] < 0.4):
             transition_indices.append(i)
-    
-    # Cap extremely high resistances for better visualization
-    max_r_to_plot = min(10000, np.median(resistances) * 10)  # Cap at 10kΩ or 10x median, whichever is smaller
-    plot_resistances = np.minimum(resistances, max_r_to_plot)
     
     # Plot the results
     plt.figure(figsize=(12, 8))
