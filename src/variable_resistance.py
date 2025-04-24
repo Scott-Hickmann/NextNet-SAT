@@ -23,14 +23,13 @@ class VariableResistance(SubCircuitFactory):
     
     Nodes:
     - vi: First control voltage input
-    - vi_bar: Second control voltage input (complement of vi)
     - vin: Input signal terminal
     - vout: Output signal terminal
     - vdd: Power supply
     - gnd: Ground
     """
     NAME = 'variable_resistance'
-    NODES = ('vi', 'vi_bar', 'vin', 'vout', 'vdd', 'gnd')
+    NODES = ('vi', 'vin', 'vout', 'vdd', 'gnd')
     
     def __init__(self, cmi):
         super().__init__()
@@ -38,6 +37,9 @@ class VariableResistance(SubCircuitFactory):
         # Add the transmission gate subcircuit
         transmission_gate = TransmissionGate()
         self.subcircuit(transmission_gate)
+        # E <name> <out+> <out-> <in+> <in-> <gain>
+        self.VCVS('inv', 'vi_bar', 'gnd', 'vdd', 'vi', 1)
+
         if cmi == 1:
             Vp = 'vi'
             Vn = 'vi_bar'
@@ -58,10 +60,10 @@ def sweep_vin_test():
 
     # Test cases: different combinations of control inputs
     test_cases = [
-        {'cmi': -1, 'vi': 0, 'vi_bar': 1, 'desc': 'cmi=-1, Vi=0, Vi_bar=1'},
-        {'cmi': -1, 'vi': 1, 'vi_bar': 0, 'desc': 'cmi=-1, Vi=1, Vi_bar=0'},
-        {'cmi': 1, 'vi': 0, 'vi_bar': 1, 'desc': 'cmi=1, Vi=0, Vi_bar=1'},
-        {'cmi': 1, 'vi': 1, 'vi_bar': 0, 'desc': 'cmi=1, Vi=1, Vi_bar=0'},
+        {'cmi': -1, 'vi': 0, 'desc': 'cmi=-1, Vi=0'},
+        {'cmi': -1, 'vi': 1, 'desc': 'cmi=-1, Vi=1'},
+        {'cmi': 1, 'vi': 0, 'desc': 'cmi=1, Vi=0'},
+        {'cmi': 1, 'vi': 1, 'desc': 'cmi=1, Vi=1'},
     ]
 
     # Define line styles, colors, and markers for better visibility
@@ -86,7 +88,7 @@ def sweep_vin_test():
         circuit.subcircuit(variable_resistance)
         
         # Instantiate the variable resistance
-        circuit.X('var_res', variable_resistance.NAME, 'vi', 'vi_bar', 'vin', 'vout', 'vdd', circuit.gnd)
+        circuit.X('var_res', variable_resistance.NAME, 'vi', 'vin', 'vout', 'vdd', circuit.gnd)
         
         # Add a load resistor to measure current
         R_load = 1e3  # 1kΩ
@@ -97,7 +99,6 @@ def sweep_vin_test():
         
         # Add control voltage sources once outside the loop
         circuit.V('vi', 'vi', circuit.gnd, case['vi']@u_V)
-        circuit.V('vi_bar', 'vi_bar', circuit.gnd, case['vi_bar']@u_V)
         
         # Create simulator
         simulator = circuit.simulator(temperature=25, nominal_temperature=25)
@@ -209,7 +210,7 @@ def sweep_vi_test():
         circuit.subcircuit(variable_resistance)
         
         # Instantiate the variable resistance
-        circuit.X('var_res', variable_resistance.NAME, 'vi', 'vi_bar', 'vin', 'vout', 'vdd', circuit.gnd)
+        circuit.X('var_res', variable_resistance.NAME, 'vi', 'vin', 'vout', 'vdd', circuit.gnd)
         
         # Add a load resistor to measure current
         R_load = 1e3  # 1kΩ
@@ -220,7 +221,6 @@ def sweep_vi_test():
         
         # Add control voltage sources
         vi_src = circuit.V('vi', 'vi', circuit.gnd, 0@u_V)  # Will be swept
-        vi_bar_src = circuit.V('vi_bar', 'vi_bar', circuit.gnd, 1@u_V)  # Will be complement of vi
         
         # Create simulator
         simulator = circuit.simulator(temperature=25, nominal_temperature=25)
@@ -229,7 +229,6 @@ def sweep_vi_test():
         for i, vi in enumerate(vi_sweep):
             # Set Vi and Vi_bar (complement)
             vi_src.dc_value = vi@u_V
-            vi_bar_src.dc_value = (vdd-vi)@u_V
             
             # Run operating point analysis
             analysis = simulator.operating_point()
