@@ -74,9 +74,11 @@ def simulate_am_circuit():
     all_growth_rates = []
     all_labels = []
 
+    n1_init = 0.01
     vi1 = 1.0
     vi2 = 1.0
     vi3 = 1.0
+    vam_init = (vi1 * vi2 * vi3 + 1) * n1_init
     
     for R in Rs:
         # Create a circuit
@@ -102,7 +104,7 @@ def simulate_am_circuit():
         simulator = circuit.simulator(temperature=25, nominal_temperature=25)
         
         # Set initial condition on n1 node 
-        simulator.initial_condition(n1=0.01)
+        simulator.initial_condition(n1=n1_init)
         
         # Set analysis parameters to improve convergence
         simulator.options(
@@ -130,9 +132,6 @@ def simulate_am_circuit():
         log_vam = np.abs(vam)
         log_vam[log_vam < 1e-6] = 1e-6  # Replace very small values
         
-        # Take logarithm to linearize the exponential growth
-        log_vals = np.log(log_vam)
-        
         # Skip early points for fitting (to avoid initial transients)
         skip_points = int(len(time) * 0.05)  # Skip first 5% of points
         if skip_points < 5:
@@ -144,34 +143,9 @@ def simulate_am_circuit():
             fit_points = len(time) - skip_points
             if fit_points < 10:
                 fit_points = len(time) - 1  # Use all but first point as last resort
-        
-        # Indices for fitting
-        start_idx = skip_points
-        end_idx = skip_points + fit_points
-        
-        # Extract time and log-voltage for the valid range
-        t_valid = time[start_idx:end_idx]
-        log_v_valid = log_vals[start_idx:end_idx]
-        
-        # Linear fit to the log data
-        from scipy.stats import linregress
-        slope, intercept, r_value, _, _ = linregress(t_valid, log_v_valid)
-        
-        # Extract growth rate from the slope
-        growth_rate = slope
-        v0 = np.exp(intercept)  # Initial value at t=0
-        
-        print(f"Growth rate from linear fit: {growth_rate:.2f} Hz")
-        print(f"Initial amplitude from fit: {v0:.6f}")
-        print(f"R-squared of linear fit: {r_value**2:.6f}")
-        print(f"Number of points used in fit: {len(t_valid)}")
-        print(f"Time range for fit: {t_valid[0]*1e6:.3f} μs to {t_valid[-1]*1e6:.3f} μs")
     
         # Calculate theoretical curve using the extracted growth rate
-        vam_theory = v0 * np.exp(growth_rate * time)
-
-        # Limit the theoretical curves to avoid overflow
-        vam_theory = np.clip(vam_theory, -1e12, 1e12)
+        vam_theory = vam_init * np.exp(growth_rate * time)
         
         # Store data for later analysis
         all_times.append(time)
