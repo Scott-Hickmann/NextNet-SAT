@@ -1,10 +1,11 @@
 import PySpice.Logging.Logging as Logging
 from PySpice.Spice.Netlist import Circuit, SubCircuit
-from PySpice.Unit import u_ms, u_us, u_F, u_Ω
+from PySpice.Unit import u_ms, u_us, u_F, u_Ω, u_V
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 
+from branch_voltage import TernaryMultiplexer
 
 class AMNewCircuit(SubCircuit):
     """
@@ -21,9 +22,9 @@ class AMNewCircuit(SubCircuit):
     - vi3: Voltage of third variable
     - gnd: Ground reference
     """
-    NODES = ('vam', 'n1', 'vi1', 'vi2', 'vi3', 'gnd')
+    NODES = ('vam', 'n1', 'vi1', 'vi2', 'vi3', 'vdd', 'gnd')
     
-    def __init__(self, R, C):
+    def __init__(self, cm1, cm2, cm3, R, C):
         """
         Initialize the AM circuit subcircuit with specific component values.
         
@@ -33,21 +34,50 @@ class AMNewCircuit(SubCircuit):
             gain (float): Voltage gain of the amplifier
                           Controls exponential growth rate by: growth_rate = (vi1*vi2*vi3)/(RC)
         """
-        super().__init__(f'AMCircuit_{R}_{C}', *self.NODES)
-            
-        # Store component values
-        self._C = C
+        super().__init__(f'AMCircuit_{cm1}_{cm2}_{cm3}_{R}_{C}', *self.NODES)
+        
+        # Create and add the ternary multiplexers
+        mux1 = TernaryMultiplexer(cmi=-cm1)
+        mux2 = TernaryMultiplexer(cmi=-cm2)
+        mux3 = TernaryMultiplexer(cmi=-cm3)
+        
+        # Create and add the NOR gate
+        # nor_gate = NorGate()
+        
+        # Add the subcircuits
+        self.subcircuit(mux1)
+        self.subcircuit(mux2)
+        self.subcircuit(mux3)
+        # self.subcircuit(nor_gate)
+
+        mux1_out = 'mux1_out'
+        mux2_out = 'mux2_out'
+        mux3_out = 'mux3_out'
+        # nor12_out = 'nor12_out'
+        nor123_out = 'nor123_out'
+        gain_node = 'gain_node'
+        
+        # Instantiate the multiplexers
+        self.X('mux1', mux1.name, 'vi1', mux1_out, 'vdd', 'gnd')
+        self.X('mux2', mux2.name, 'vi2', mux2_out, 'vdd', 'gnd')
+        self.X('mux3', mux3.name, 'vi3', mux3_out, 'vdd', 'gnd')
+
+        # Instantiate the NOR gate to compute V(vi1)*V(vi2)*V(vi3)
+        # self.X('nor12', nor_gate.name, mux1_out, mux2_out, nor12_out, 'vdd', 'gnd')
+        # self.X('nor123', nor_gate.name, nor12_out, mux3_out, nor123_out, 'vdd', 'gnd')
+        self.B('nor123', nor123_out, 'gnd', v='V(mux1_out)*V(mux2_out)*V(mux3_out)')
+
+        # Add 1V power supply to get V(vi1)*V(vi2)*V(vi3) + 1V
+        self.V('gain_node', gain_node, nor123_out, 1@u_V)
         
         # Add RC circuit with initial condition capability
         self.R('1', 'n1', 'vam', R@u_Ω)
         self.C('1', 'n1', 'gnd', C@u_F)
-
-        self.V('v1', 'v1', 'gnd', 1.0)
         
         # Add controlled source with feedback to create exponential growth
         # The growth rate is determined by: growth_rate = (gain-1)/(RC)
         # E <name> <out+> <out-> <in+> <in-> <gain>
-        self.B('amp', 'vam', 'gnd', v='((V(vi1)*V(vi2)*V(vi3))+V(v1))*V(n1)')
+        self.B('amp', 'vam', 'gnd', v='V(gain_node)*V(n1)')
 
 
 def simulate_am_circuit():
@@ -55,7 +85,7 @@ def simulate_am_circuit():
     Simulate the AM circuit and plot the output.
     """
     # Define component values
-    Rs = [0.3e3, 3e3, 30e3, 300e3]
+    R = 10e3
     C = 0.01e-6
 
     # Set simulation parameters
@@ -75,30 +105,50 @@ def simulate_am_circuit():
     all_labels = []
 
     n1_init = 0.01
-    vi1 = 1.0
-    vi2 = 1.0
-    vi3 = 1.0
-    vam_init = (vi1 * vi2 * vi3 + 1) * n1_init
+    cases = [
+        {'vi1': 0.0, 'vi2': 0.0, 'vi3': 0.0, 'cm1': 1, 'cm2': 1, 'cm3': 1},
+        {'vi1': 0.0, 'vi2': 0.0, 'vi3': 0.0, 'cm1': -1, 'cm2': -1, 'cm3': -1},
+        {'vi1': 1.0, 'vi2': 1.0, 'vi3': 1.0, 'cm1': 1, 'cm2': 1, 'cm3': 1},
+        {'vi1': 1.0, 'vi2': 1.0, 'vi3': 1.0, 'cm1': -1, 'cm2': -1, 'cm3': -1},
+    ]
     
-    for R in Rs:
+    for case in cases:
+        vi1 = case['vi1']
+        vi2 = case['vi2']
+        vi3 = case['vi3']
+        cm1 = case['cm1']
+        cm2 = case['cm2']
+        cm3 = case['cm3']
+
         # Create a circuit
         circuit = Circuit('AM Circuit Simulation')
 
+        mux1 = 1 - vi1 if cm1 == 1 else vi1
+        mux2 = 1 - vi2 if cm2 == 1 else vi2
+        mux3 = 1 - vi3 if cm3 == 1 else vi3
+        prod = mux1 * mux2 * mux3
+
         # Calculate the theoretical growth rate
-        growth_rate = (vi1*vi2*vi3)/(R*C)
+        vam_init = (prod + 1) * n1_init
+        growth_rate = prod/(R*C)
         print(f"Theoretical growth rate: {growth_rate:.2f} Hz")
-        print(f"Theoretical time constant: {1000/growth_rate:.3f} μs")
+        if growth_rate > 0:
+            print(f"Theoretical time constant: {1000/growth_rate:.3f} μs")
+        else:
+            print("Growth rate is zero")
             
         # Add the AMCircuit subcircuit
-        am_circuit = AMNewCircuit(R, C)
+        am_circuit = AMNewCircuit(cm1, cm2, cm3, R, C)
         circuit.subcircuit(am_circuit)
+
+        circuit.V('vdd', 'vdd', circuit.gnd, 1@u_V)
 
         circuit.V('vi1', 'vi1', circuit.gnd, vi1)
         circuit.V('vi2', 'vi2', circuit.gnd, vi2)
         circuit.V('vi3', 'vi3', circuit.gnd, vi3)
         
         # Instantiate the AM circuit
-        circuit.X('am1', am_circuit.name, 'vam', 'n1', 'vi1', 'vi2', 'vi3', circuit.gnd)
+        circuit.X('am1', am_circuit.name, 'vam', 'n1', 'vi1', 'vi2', 'vi3', 'vdd', circuit.gnd)
         
         # Create simulator with specific instructions to honor initial conditions
         simulator = circuit.simulator(temperature=25, nominal_temperature=25)
@@ -155,10 +205,10 @@ def simulate_am_circuit():
         all_labels.append(f'R = {R/1000:.1f} kΩ')
     
         # Plot on the combined figures
-        plotted = ax1.plot(time * 1000, vam, linestyle='-', linewidth=1, label=f'R = {R/1000:.1f} kΩ')
+        plotted = ax1.plot(time * 1000, vam, linestyle='-', linewidth=1, label=f'vi1={vi1}, vi2={vi2}, vi3={vi3}, cm1={cm1}, cm2={cm2}, cm3={cm3}')
         color = plotted[0].get_color()
-        ax1.plot(time * 1000, vam_theory, linestyle='--', linewidth=2, label=f'Theoretical R = {R/1000:.1f} kΩ', color=color)
-        ax2.semilogy(time * 1000, np.abs(vam), linewidth=2, label=f'R = {R/1000:.1f} kΩ')
+        ax1.plot(time * 1000, vam_theory, linestyle='--', linewidth=2, label=f'Theoretical vi1={vi1}, vi2={vi2}, vi3={vi3}, cm1={cm1}, cm2={cm2}, cm3={cm3}', color=color)
+        ax2.semilogy(time * 1000, np.abs(vam), linewidth=2, label=f'vi1={vi1}, vi2={vi2}, vi3={vi3}, cm1={cm1}, cm2={cm2}, cm3={cm3}')
     
     # Format the first figure (linear and log plots)
     ax1.set_xlabel('Time [ms]', fontsize=12)
@@ -187,19 +237,6 @@ def simulate_am_circuit():
     print("Combined logarithmic plot saved to 'graphs/am_new_output.png'")
     
     plt.show()
-    
-    # Analyze and print characteristics of the outputs
-    print("\nCircuit Analysis Summary:")
-    for i, R in enumerate(Rs):
-        print(f"\nR = {R/1000:.1f} kΩ:")
-        print(f"Initial Voltage: {all_vams[i][0]:.6f}V")
-        print(f"Final Voltage: {all_vams[i][-1]:.6f}V")
-        print(f"Maximum Voltage: {np.max(all_vams[i]):.6f}V")
-        print(f"Minimum Voltage: {np.min(all_vams[i]):.6f}V")
-        
-        # Print growth rates
-        print(f"Fitted Exponential Growth Rate: {all_growth_rates[i]:.2f} Hz")
-        print(f"Time Constant from Fit: {1000/all_growth_rates[i]:.3f} μs")
 
 if __name__ == '__main__':
     # Set up logging
