@@ -3,6 +3,7 @@ from PySpice.Spice.Netlist import Circuit
 import matplotlib.pyplot as plt
 import argparse
 import os
+import numpy as np
 from pysat.formula import CNF
 
 from clause import Clause
@@ -90,8 +91,8 @@ def create_3sat_circuit(clauses, variable_names):
     
     # Set a common capacitance value for all components
     C = 1e-9  # 1nF
-    C_aux = 10e-9  # 10nF
-    gain_aux = 20.0
+    R_aux = 20e3  # 20kΩ
+    C_aux = 1e-6  # 1000nF
      
     # Create Variable subcircuits for each variable
     variables = []
@@ -112,7 +113,7 @@ def create_3sat_circuit(clauses, variable_names):
             cm_values.append(-1 if is_negated else 1)
         
         # Create the Clause subcircuit
-        clause_circuit = Clause(cm1=cm_values[0], cm2=cm_values[1], cm3=cm_values[2], C=C, C_aux=C_aux, gain_aux=gain_aux)
+        clause_circuit = Clause(cm1=cm_values[0], cm2=cm_values[1], cm3=cm_values[2], C=C, R_aux=R_aux, C_aux=C_aux)
         circuit.subcircuit(clause_circuit)
         
         # Get the variable nodes for this clause
@@ -127,7 +128,7 @@ def create_3sat_circuit(clauses, variable_names):
     return circuit
 
 
-def run_3sat_simulation(circuit, variable_names, clauses, simulation_time=10, step_time=1e-3):
+def run_3sat_simulation(circuit, variable_names, clauses, simulation_time, step_time):
     """
     Run a transient simulation on the 3-SAT circuit.
     
@@ -301,7 +302,7 @@ def plot_3sat_results(analysis, variable_names, clauses, file_name, show_plot=Tr
         plt.close(fig)
 
 
-def interpret_results(analysis, variable_names):
+def interpret_results(analysis, variable_names, at=-1):
     """
     Interpret the results of the 3-SAT simulation.
     
@@ -316,7 +317,7 @@ def interpret_results(analysis, variable_names):
     final_voltages = {}
     for name in variable_names:
         node_name = f'var_{name}'
-        final_voltage = float(analysis[node_name][-1])
+        final_voltage = float(analysis[node_name][at])
         final_voltages[name] = final_voltage
     
     # Interpret the voltages as boolean values
@@ -338,6 +339,32 @@ def interpret_results(analysis, variable_names):
     
     return results, final_voltages
 
+def verify_results(clauses, results, variable_names):
+    satisfies_all = True
+
+    not_satisfied = []
+
+    count_satisfied = 0
+    for i, clause in enumerate(clauses):
+        clause_satisfied = False
+        for var_idx, is_negated in clause:
+            var_name = variable_names[var_idx]
+            var_value = results[var_name]
+            if var_value is None:
+                continue  # Skip undecided variables
+            
+            # Check if this literal satisfies the clause
+            if (not is_negated and var_value) or (is_negated and not var_value):
+                clause_satisfied = True
+                break
+        
+        if not clause_satisfied:
+            satisfies_all = False
+            not_satisfied.append(i)
+        else:
+            count_satisfied += 1
+
+    return satisfies_all, count_satisfied, not_satisfied
 
 def main():
     """
@@ -346,7 +373,7 @@ def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(description='Solve a 3-SAT problem using an analog circuit simulator.')
     parser.add_argument('--cnf', type=str, help='Path to the CNF file')
-    parser.add_argument('--sim-time', type=float, default=30, help='Simulation time in seconds')
+    parser.add_argument('--sim-time', type=float, default=1, help='Simulation time in seconds')
     parser.add_argument('--step-time', type=float, default=1e-3, help='Simulation step time in seconds')
     args = parser.parse_args()
     
@@ -389,32 +416,32 @@ def main():
         print(f"Variable {name}: {status} (Voltage: {final_voltages[name]:.3f}V)")
     
     # Check if the assignment satisfies all clauses
-    satisfies_all = True
-
-    count_satisfied = 0
-    for i, clause in enumerate(clauses):
-        clause_satisfied = False
-        for var_idx, is_negated in clause:
-            var_name = variable_names[var_idx]
-            var_value = results[var_name]
-            if var_value is None:
-                continue  # Skip undecided variables
-            
-            # Check if this literal satisfies the clause
-            if (not is_negated and var_value) or (is_negated and not var_value):
-                clause_satisfied = True
-                break
-        
-        if not clause_satisfied:
-            satisfies_all = False
-            print(f"Clause {i+1} is not satisfied!")
-        else:
-            count_satisfied += 1
+    satisfies_all, count_satisfied, not_satisfied = verify_results(clauses, results, variable_names)
     
     if satisfies_all:
         print(f"\nThe assignment satisfies all clauses! ({count_satisfied}/{len(clauses)})")
     else:
         print(f"\nThe assignment does not satisfy all clauses. ({count_satisfied}/{len(clauses)})")
+    for clause in not_satisfied:
+        print(f"Clause {clause + 1} is not satisfied!")
+
+    count_satisfied_list = []
+    satisfied_at = -1
+    for i in range(len(analysis.time)):
+        results, final_voltages = interpret_results(analysis, variable_names, i)
+        satisfies_all, count_satisfied, _ = verify_results(clauses, results, variable_names)
+        count_satisfied_list.append(count_satisfied)
+        if satisfies_all and satisfied_at == -1:
+            satisfied_at = i
+
+    times = np.array(analysis.time)
+    plt.plot(times, count_satisfied_list)
+    # Also add a vertical line at time when satisfies_all is true
+    plt.axvline(x=times[satisfied_at], color='red', linestyle='--', label='Satisfies all')
+    plt.xlabel('Time (milliseconds)')
+    plt.ylabel('Count satisfied')
+    plt.savefig(f'graphs/{args.cnf.split("/")[-1].split(".")[0]}_count_satisfied.png', dpi=300, bbox_inches='tight')
+    plt.show()
 
 
 if __name__ == '__main__':

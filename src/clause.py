@@ -2,7 +2,7 @@ import PySpice.Logging.Logging as Logging
 from PySpice.Spice.Netlist import Circuit, SubCircuit
 
 from branch import Branch
-from am_full import AMFull
+from am_new import AMNewCircuit
 
 class Clause(SubCircuit):
     """
@@ -27,7 +27,7 @@ class Clause(SubCircuit):
     """
     NODES = ('n1', 'v1', 'v2', 'v3', 'vdd', 'gnd')
     
-    def __init__(self, cm1, cm2, cm3, C, C_aux, gain_aux):
+    def __init__(self, cm1, cm2, cm3, C, R_aux, C_aux):
         """
         Initialize the Clause subcircuit with specific cm1, cm2, cm3 values and capacitance.
         
@@ -49,7 +49,7 @@ class Clause(SubCircuit):
         if cm1 == 0 or cm2 == 0 or cm3 == 0:
             raise ValueError("0 is not allowed as a control value")
         
-        am = AMFull(cm1=cm1, cm2=cm2, cm3=cm3, C=C_aux, gain=gain_aux)
+        am = AMNewCircuit(cm1=cm1, cm2=cm2, cm3=cm3, R=R_aux, C=C_aux)
         self.subcircuit(am)
         
         # Instantiate the AMFull subcircuit
@@ -102,7 +102,9 @@ def main():
     
     # Create the Clause subcircuit
     C = 1e-12  # 1nF
-    clause = Clause(cm1=cm1, cm2=cm2, cm3=cm3, C=C)
+    R_aux = 10e3  # 10kΩ
+    C_aux = 1e-6  # 10nF
+    clause = Clause(cm1=cm1, cm2=cm2, cm3=cm3, C=C, R_aux=R_aux, C_aux=C_aux)
     circuit.subcircuit(clause)
     
     try:

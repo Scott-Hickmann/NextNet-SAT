@@ -10,7 +10,7 @@ from main import load_cnf_file, create_3sat_circuit, run_3sat_simulation, interp
 
 # Configuration
 CNF_FOLDER = 'cnf'
-RESULTS_CSV = 'results.csv'
+RESULTS_CSV = 'results/results.csv'
 GRAPHS_FOLDER = 'graphs'
 SIMULATION_TIME = 10  # seconds
 STEP_TIME = 1e-3  # seconds
