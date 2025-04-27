@@ -21,7 +21,7 @@ class AMCircuit(SubCircuit):
     RA = 'vam'
     RB = 'n1'
     
-    def __init__(self, C=0.01e-6, gain=2.0):
+    def __init__(self, C, gain):
         """
         Initialize the AM circuit subcircuit with specific component values.
         
@@ -42,6 +42,7 @@ class AMCircuit(SubCircuit):
         
         # Add controlled source with feedback to create exponential growth
         # The growth rate is determined by: growth_rate = (gain-1)/(RC)
+        # E <name> <out+> <out-> <in+> <in-> <gain>
         self.VCVS('amp', 'vam', 'gnd', 'n1', 'gnd', voltage_gain=gain)
 
 

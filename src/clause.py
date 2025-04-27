@@ -2,7 +2,7 @@ import PySpice.Logging.Logging as Logging
 from PySpice.Spice.Netlist import Circuit, SubCircuit
 
 from branch import Branch
-
+from am_full import AMFull
 
 class Clause(SubCircuit):
     """
@@ -25,9 +25,9 @@ class Clause(SubCircuit):
     
     The C parameter is used for all Branch subcircuits.
     """
-    NODES = ('v1', 'v2', 'v3', 'vdd', 'gnd')
+    NODES = ('n1', 'v1', 'v2', 'v3', 'vdd', 'gnd')
     
-    def __init__(self, cm1, cm2, cm3, C):
+    def __init__(self, cm1, cm2, cm3, C, C_aux, gain_aux):
         """
         Initialize the Clause subcircuit with specific cm1, cm2, cm3 values and capacitance.
         
@@ -37,7 +37,7 @@ class Clause(SubCircuit):
             cm3 (int): The third ternary control value (-1 or 1)
             C (float): The capacitance value in Farads (default: 1pF)
         """
-        super().__init__(f'clause_{cm1}_{cm2}_{cm3}_{C}', *self.NODES)
+        super().__init__(f'clause_{cm1}_{cm2}_{cm3}_{C}_{C_aux}', *self.NODES)
             
         # Store control values and capacitance
         self._cm1 = cm1
@@ -48,6 +48,12 @@ class Clause(SubCircuit):
         # 0 is not allowed
         if cm1 == 0 or cm2 == 0 or cm3 == 0:
             raise ValueError("0 is not allowed as a control value")
+        
+        am = AMFull(cm1=cm1, cm2=cm2, cm3=cm3, C=C_aux, gain=gain_aux)
+        self.subcircuit(am)
+        
+        # Instantiate the AMFull subcircuit
+        self.X('am', am.name, 'vam', 'n1', 'v1', 'v2', 'v3', 'vdd', 'gnd')
         
         # Create the three Branch subcircuits with different configurations
         branch1 = Branch(cmi=cm1, cmi2=cm2, cmi3=cm3, C=C)
@@ -60,9 +66,9 @@ class Clause(SubCircuit):
         self.subcircuit(branch3)
         
         # Instantiate the Branch subcircuits
-        self.X('branch1', branch1.name, 'v2', 'v3', 'v1', 'gnd', 'vdd', 'gnd')
-        self.X('branch2', branch2.name, 'v3', 'v1', 'v2', 'gnd', 'vdd', 'gnd')
-        self.X('branch3', branch3.name, 'v1', 'v2', 'v3', 'gnd', 'vdd', 'gnd')
+        self.X('branch1', branch1.name, 'vam', 'v2', 'v3', 'v1', 'gnd', 'vdd', 'gnd')
+        self.X('branch2', branch2.name, 'vam', 'v3', 'v1', 'v2', 'gnd', 'vdd', 'gnd')
+        self.X('branch3', branch3.name, 'vam', 'v1', 'v2', 'v3', 'gnd', 'vdd', 'gnd')
 
 
 def main():
@@ -85,12 +91,7 @@ def main():
     v1_node = 'v1'
     v2_node = 'v2'
     v3_node = 'v3'
-    
-    # Add initial voltage sources to set node voltages
-    # This helps establish an initial operating point
-    circuit.V('v1_init', v1_node, circuit.gnd, 0.5)
-    circuit.V('v2_init', v2_node, circuit.gnd, 0.5)
-    circuit.V('v3_init', v3_node, circuit.gnd, 0.5)
+    n1_node = 'n1'
     
     # Set control values
     cm1 = 1
@@ -103,9 +104,6 @@ def main():
     C = 1e-12  # 1nF
     clause = Clause(cm1=cm1, cm2=cm2, cm3=cm3, C=C)
     circuit.subcircuit(clause)
-    
-    # Instantiate the Clause
-    circuit.X('clause', clause.name, v1_node, v2_node, v3_node, 'vdd', circuit.gnd)
     
     try:
         # Create a new circuit for transient analysis
@@ -124,20 +122,20 @@ def main():
         transient_circuit.subcircuit(clause)
         
         # Instantiate the Clause
-        transient_circuit.X('clause', clause.name, v1_node, v2_node, v3_node, 'vdd', transient_circuit.gnd)
+        transient_circuit.X('clause', clause.name, n1_node, v1_node, v2_node, v3_node, 'vdd', transient_circuit.gnd)
         
         # Set initial conditions for the capacitors based on operating point
         # This helps avoid convergence issues at the start of the simulation
         v1_init = 0.5
         v2_init = 0.5
         v3_init = 0.5
-        
+        n1_init = 0.01
         # Run transient simulation
         transient_simulator = transient_circuit.simulator(temperature=25, nominal_temperature=25)
         transient_simulator.options(reltol=1e-3, abstol=1e-6, itl1=100, itl2=50)
         
         # Set initial conditions for the nodes
-        transient_simulator.initial_condition(v1=v1_init, v2=v2_init, v3=v3_init)
+        transient_simulator.initial_condition(v1=v1_init, v2=v2_init, v3=v3_init, n1=n1_init)
         
         # Run transient analysis
         step_time = 1e-3 # 1 millisecond steps
