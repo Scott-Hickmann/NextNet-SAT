@@ -28,7 +28,7 @@ class AMFull(SubCircuit):
     """
     NODES = ('vam', 'n1', 'vi1', 'vi2', 'vi3', 'vdd', 'gnd')
     
-    def __init__(self, cm1, cm2, cm3, C=0.01e-6, gain=2.0):
+    def __init__(self, cm1, cm2, cm3, C, gain):
         """
         Initialize the AMFull subcircuit with specified capacitance.
         
