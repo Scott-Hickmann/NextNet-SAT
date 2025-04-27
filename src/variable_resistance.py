@@ -1,12 +1,12 @@
 import PySpice.Logging.Logging as Logging
-from PySpice.Spice.Netlist import Circuit, SubCircuitFactory
+from PySpice.Spice.Netlist import Circuit, SubCircuit
 from PySpice.Unit import u_V, u_Ohm
 import matplotlib.pyplot as plt
 import numpy as np
 
 from transmission_gate import TransmissionGate
 
-class VariableResistance(SubCircuitFactory):
+class VariableResistance(SubCircuit):
     """
     A variable resistance circuit using five transmission gates.
     
@@ -28,11 +28,10 @@ class VariableResistance(SubCircuitFactory):
     - vdd: Power supply
     - gnd: Ground
     """
-    NAME = 'variable_resistance'
     NODES = ('vi', 'vin', 'vout', 'vdd', 'gnd')
     
     def __init__(self, cmi):
-        super().__init__()
+        super().__init__(f'VariableResistance_{cmi}', *self.NODES)
         
         # Add the transmission gate subcircuit
         transmission_gate = TransmissionGate()
@@ -49,7 +48,7 @@ class VariableResistance(SubCircuitFactory):
         else:
             raise ValueError("cmi must be 1 or -1 for now")
 
-        self.X('tg', transmission_gate.NAME, 'vin', 'vout', Vn, Vp, 'vdd', 'gnd')
+        self.X('tg', transmission_gate.name, 'vin', 'vout', Vn, Vp, 'vdd', 'gnd')
 
 
 def sweep_vin_test():
@@ -69,7 +68,6 @@ def sweep_vin_test():
     # Define line styles, colors, and markers for better visibility
     line_styles = ['-', '--', '-.', ':']
     colors = ['blue', 'red', 'green', 'purple']
-    markers = ['o', 's', '^', 'x']
     
     # Plot the results
     plt.figure(figsize=(15, 10))
@@ -88,7 +86,7 @@ def sweep_vin_test():
         circuit.subcircuit(variable_resistance)
         
         # Instantiate the variable resistance
-        circuit.X('var_res', variable_resistance.NAME, 'vi', 'vin', 'vout', 'vdd', circuit.gnd)
+        circuit.X('var_res', variable_resistance.name, 'vi', 'vin', 'vout', 'vdd', circuit.gnd)
         
         # Add a load resistor to measure current
         R_load = 1e3  # 1kΩ
@@ -130,8 +128,7 @@ def sweep_vin_test():
         plt.subplot(2, 1, 1)
         plt.plot(input_voltages, output_voltages, 
                  linestyle=line_styles[i], 
-                 color=colors[i], 
-                 marker=markers[i], 
+                 color=colors[i],
                  markevery=10,  # Place marker every 10 points to avoid overcrowding
                  linewidth=2,
                  label=case['desc'])
@@ -140,8 +137,7 @@ def sweep_vin_test():
         plt.subplot(2, 1, 2)
         plt.plot(input_voltages, resistances, 
                  linestyle=line_styles[i], 
-                 color=colors[i], 
-                 marker=markers[i], 
+                 color=colors[i],
                  markevery=10,
                  linewidth=2,
                  label=f"{case['desc']} (Avg: {median_resistance:.2f}Ω)")
@@ -180,21 +176,14 @@ def sweep_vi_test():
     # Store results for Q=0 and Q=1
     cmi_values = [-1, 1]
     
-    # Create non-uniform sweep with more points in the transition regions
-    # Add more points near the edges (0-0.2 and 0.8-1.0) for better resolution
-    vi_edges = np.linspace(0, 0.2, 31)  # More points in 0-0.2 range
-    vi_middle = np.linspace(0.2, 0.8, 41)  # Regular points in the middle
-    vi_edges2 = np.linspace(0.8, 1.0, 31)  # More points in 0.8-1.0 range
-    vi_sweep = np.unique(np.concatenate([vi_edges, vi_middle, vi_edges2]))
+    # Create uniform sweep with more points in the transition regions
+    vi_sweep = np.linspace(0, 1, 1001)
     
     resistances = {cmi: np.zeros(len(vi_sweep)) for cmi in cmi_values}
     vout_values = {cmi: np.zeros(len(vi_sweep)) for cmi in cmi_values}
     
     # Fixed input voltage for resistance calculation
     vin_value = 0.5
-    
-    # Maximum resistance to cap the values (to avoid extreme peaks)
-    max_resistance = 0.3e6  # 300kΩ cap
     
     # Test for each Q value
     for cmi in cmi_values:
@@ -210,7 +199,7 @@ def sweep_vi_test():
         circuit.subcircuit(variable_resistance)
         
         # Instantiate the variable resistance
-        circuit.X('var_res', variable_resistance.NAME, 'vi', 'vin', 'vout', 'vdd', circuit.gnd)
+        circuit.X('var_res', variable_resistance.name, 'vi', 'vin', 'vout', 'vdd', circuit.gnd)
         
         # Add a load resistor to measure current
         R_load = 1e3  # 1kΩ
@@ -241,26 +230,9 @@ def sweep_vi_test():
             voltage_drop = vin_value - vout
             current = vout / R_load
             
-            # Calculate resistance (avoid division by zero)
-            epsilon = 1e-10
-            if current > epsilon:
-                res = voltage_drop / current
-                # Cap the resistance to avoid extreme values
-                resistances[cmi][i] = min(res, max_resistance)
-            else:
-                resistances[cmi][i] = max_resistance  # Cap very high resistance
-    
-    # Smooth the resistance curves to make transitions less abrupt
-    # Apply a simple moving average filter
-    window_size = 3
-    for cmi in cmi_values:
-        # Pad the array for the moving average
-        padded = np.pad(resistances[cmi], (window_size//2, window_size//2), mode='edge')
-        smoothed = np.zeros_like(resistances[cmi])
-        for i in range(len(resistances[cmi])):
-            # Calculate moving average
-            smoothed[i] = np.mean(padded[i:i+window_size])
-        resistances[cmi] = smoothed
+            # Calculate resistance
+            res = voltage_drop / current
+            resistances[cmi][i] = res
     
     # Plot the results
     plt.figure(figsize=(15, 10))
@@ -268,7 +240,6 @@ def sweep_vi_test():
     # Define line styles for better visibility
     line_styles = ['-', '--']
     colors = ['blue', 'red']
-    markers = ['o', 's']
 
     print(f"Resistance (cmi=1, vi=0) = {resistances[1][0]/1000:.1f}kΩ")
     print(f"Resistance (cmi=1, vi=Vdd) = {resistances[1][-1]/1000:.1f}kΩ")
@@ -280,8 +251,7 @@ def sweep_vi_test():
     for i, cmi in enumerate(cmi_values):
         plt.plot(vi_sweep, resistances[cmi], 
                  linestyle=line_styles[i], 
-                 color=colors[i], 
-                 marker=markers[i], 
+                 color=colors[i],  
                  markevery=10,
                  linewidth=2,
                  label=f'cmi={cmi}')
@@ -309,8 +279,7 @@ def sweep_vi_test():
     for i, cmi in enumerate(cmi_values):
         plt.plot(vi_sweep, vout_values[cmi], 
                  linestyle=line_styles[i], 
-                 color=colors[i], 
-                 marker=markers[i], 
+                 color=colors[i],
                  markevery=10,
                  linewidth=2,
                  label=f'cmi={cmi}')
@@ -336,8 +305,7 @@ def sweep_vi_test():
     for i, cmi in enumerate(cmi_values):
         plt.semilogy(vi_sweep, resistances[cmi], 
                      linestyle=line_styles[i], 
-                     color=colors[i], 
-                     marker=markers[i], 
+                     color=colors[i],
                      markevery=10,
                      linewidth=2,
                      label=f'cmi={cmi}')
