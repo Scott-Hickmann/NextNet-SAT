@@ -269,6 +269,11 @@ def sweep_vi_test():
     line_styles = ['-', '--']
     colors = ['blue', 'red']
     markers = ['o', 's']
+
+    print(f"Resistance (cmi=1, vi=0) = {resistances[1][0]/1000:.1f}kΩ")
+    print(f"Resistance (cmi=1, vi=Vdd) = {resistances[1][-1]/1000:.1f}kΩ")
+    print(f"Resistance (cmi=-1, vi=0) = {resistances[-1][0]/1000:.1f}kΩ")
+    print(f"Resistance (cmi=-1, vi=Vdd) = {resistances[-1][-1]/1000:.1f}kΩ")
     
     # Plot 1: Resistance vs Vi
     plt.subplot(2, 1, 1)
