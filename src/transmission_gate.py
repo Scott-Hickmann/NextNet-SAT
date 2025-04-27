@@ -26,17 +26,15 @@ class TransmissionGate(SubCircuitFactory):
         super().__init__()
         
         # Define the NMOS and PMOS models with parameters
-        # Using improved parameters for both transistors with realistic threshold voltages
-        self.model('NMOS', 'NMOS', vto=0, kp=1e-3, lambda_=0.01)  # Positive threshold for NMOS
-        self.model('PMOS', 'PMOS', vto=0, kp=1e-3, lambda_=0.01)  # Negative threshold for PMOS
+        # Using parameters optimized for early turn-on and steep response
+        self.model('NMOS', 'NMOS', vto=0.0, kp=4e-4, lambda_=0.2)  # Higher threshold, higher kp/lambda
+        self.model('PMOS', 'PMOS', vto=-0.0, kp=2e-4, lambda_=0.2)  # Higher threshold, higher kp/lambda
         
-        # NMOS transistor (passes when enable is high)
-        # Proper connection order: drain, gate, source, body
-        self.M(1, 'output', 'enable', 'input', 'gnd', model='NMOS')
+        self.M(1, 'output', 'enable', 'input', 'gnd', model='NMOS', w=4, l=0.5)  # Wider width, shorter length
+        self.M(2, 'output', 'enable_bar', 'input', 'vdd', model='PMOS', w=8, l=0.5)  # Wider width, shorter length
         
-        # PMOS transistor (passes when enable_bar is low)
-        # Proper connection order: drain, gate, source, body
-        self.M(2, 'output', 'enable_bar', 'input', 'vdd', model='PMOS')
+        # Higher resistance to ensure sharper transition
+        self.R('leak', 'input', 'output', 500e3@u_Ohm)  # Increased from 500k to 5M ohms
 
 
 def test_resistive_behavior():
@@ -144,7 +142,7 @@ def test_resistive_behavior():
     
     # Also verify the constant resistance by testing at specific points
     print("\nVerification at specific points:")
-    test_points = [0.2, 0.4, 0.6, 0.8]
+    test_points = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
     
     for v_point in test_points:
         # Find closest index
@@ -192,7 +190,7 @@ def test_enable_sweep():
     simulator = circuit.simulator(temperature=25, nominal_temperature=25)
     
     # Number of steps for the sweep
-    num_steps = 101
+    num_steps = 1001
     
     # Arrays to store results
     enable_values = np.linspace(0, vdd, num_steps)
@@ -252,9 +250,9 @@ def test_enable_sweep():
     
     # Plot 2: Resistance vs Enable
     plt.subplot(2, 1, 2)
-    plt.semilogy(enable_values, resistances, 'g-')  # Use log scale for resistance
+    plt.plot(enable_values, resistances / 1000, 'g-')
     plt.xlabel('Enable Voltage [V]')
-    plt.ylabel('Resistance [Ω] (log scale)')
+    plt.ylabel('Resistance [kΩ]')
     plt.title('Transmission Gate Resistance vs Enable Voltage')
     plt.grid(True)
     
@@ -266,11 +264,6 @@ def test_enable_sweep():
     min_r_idx = np.argmin(resistances)
     min_r_en = enable_values[min_r_idx]
     min_r_val = resistances[min_r_idx]
-    
-    plt.annotate(f'Min: {min_r_val:.2f}Ω at Enable={min_r_en:.2f}V',
-                xy=(min_r_en, min_r_val),
-                xytext=(min_r_en, min_r_val * 5),
-                arrowprops=dict(facecolor='black', shrink=0.05, width=1.5))
     
     plt.tight_layout()
     
@@ -285,7 +278,7 @@ def test_enable_sweep():
     print(f"Minimum Resistance: {min_r_val:.2f}Ω at Enable={min_r_en:.2f}V, Enable_bar={vdd-min_r_en:.2f}V")
     
     # Show resistance at key enable voltage points
-    key_points = [0, 0.25, 0.5, 0.75, 1.0]
+    key_points = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
     print("\nResistance at key enable voltage points:")
     
     for point in key_points:
