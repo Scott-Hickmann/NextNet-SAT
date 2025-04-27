@@ -1,6 +1,6 @@
 import PySpice.Logging.Logging as Logging
 from PySpice.Spice.Netlist import Circuit, SubCircuit
-from PySpice.Unit import u_V, u_Ω, u_ms, u_us, u_F
+from PySpice.Unit import u_V, u_Ω, u_ms, u_us
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -20,12 +20,13 @@ class AMFull(SubCircuit):
     
     Nodes:
     - vam: Output voltage of the circuit
-    - gnd: Ground reference
     - vi1: Control voltage 1 for first pair of variable resistances
     - vi2: Control voltage 2 for second pair of variable resistances
     - vi3: Control voltage 3 for third pair of variable resistances
+    - vdd: Power supply
+    - gnd: Ground reference
     """
-    NODES = ('vam', 'n1', 'gnd', 'vi1', 'vi2', 'vi3')
+    NODES = ('vam', 'n1', 'vi1', 'vi2', 'vi3', 'vdd', 'gnd')
     
     def __init__(self, cm1, cm2, cm3, C=0.01e-6, gain=2.0):
         """
@@ -38,8 +39,8 @@ class AMFull(SubCircuit):
             C (float): Capacitance value in farads (default: 0.01μF)
             gain (float): Gain of the AM circuit (default: 2.0)
         """
-        super().__init__(f'AMFull_{C}', *self.NODES)
-            
+        super().__init__(f'AMFull_{cm1}_{cm2}_{cm3}_{C}_{gain}', *self.NODES)
+        
         # Add the AMCircuit subcircuit
         am = AMCircuit(C=C, gain=gain)
         self.subcircuit(am)
@@ -69,9 +70,9 @@ class AMFull(SubCircuit):
             self.R('r13', r_node2, am.RB, R)
         else:
             # 3 variable resistances in series
-            self.X('var_res11', var_res1.NAME, 'vi1', am.RA, r_node1, 'vdd', 'gnd')
-            self.X('var_res12', var_res2.NAME, 'vi2', r_node1, r_node2, 'vdd', 'gnd')
-            self.X('var_res13', var_res3.NAME, 'vi3', r_node2, am.RB, 'vdd', 'gnd')
+            self.X('var_res11', var_res1.name, 'vi1', am.RA, r_node1, 'vdd', 'gnd')
+            self.X('var_res12', var_res2.name, 'vi2', r_node1, r_node2, 'vdd', 'gnd')
+            self.X('var_res13', var_res3.name, 'vi3', r_node2, am.RB, 'vdd', 'gnd')
 
 
 # Function to run simulation for a specific scenario
@@ -84,23 +85,30 @@ def simulate_scenario(scenario_name, cmi_values, vi_points):
     
     # Create a new circuit for this scenario
     scenario_circuit = Circuit(f'AMFull Test - {scenario_name}')
+
+    # Add power supply
+    vdd = 1
+    scenario_circuit.V('dd', 'vdd', scenario_circuit.gnd, vdd@u_V)
     
     # Create the AMFull subcircuit with the specified cmi values
     am_full = AMFull(cm1=cmi_values[0], cm2=cmi_values[1], cm3=cmi_values[2], C=C, gain=gain)
     scenario_circuit.subcircuit(am_full)
     
     # Instantiate the AMFull circuit
-    scenario_circuit.X('am_full', am_full.name, 'vam', 'n1', scenario_circuit.gnd, 'vi', 'vi', 'vi')
+    scenario_circuit.X('am_full', am_full.name, 'vam', 'n1', 'vi', 'vi', 'vi', 'vdd', scenario_circuit.gnd)
     
     # Use a more stable approach for ramping vi with PWL (piece-wise linear)
     # Define time points for the PWL source
     end_time_value = float(0.5e-3)  # 0.5ms in seconds
-    time_points = [0, end_time_value/2, end_time_value]
+    time_points = np.linspace(0, end_time_value, len(vi_points))
     
     # Create PWL (Piece-Wise Linear) source for vi
     scenario_circuit.PieceWiseLinearVoltageSource('vi_src', 'vi_src', scenario_circuit.gnd,
                                                 values=[(t, v) for t, v in zip(time_points, vi_points)])
     scenario_circuit.R('vi_r', 'vi_src', 'vi', 10@u_Ω)
+
+    # For debugging only
+    scenario_circuit.VCVS('inv', 'vi_bar', 'gnd', 'vdd', 'vi', 1)
 
     # Set simulation parameters - shorter time to see exponential growth
     step_time = 0.1@u_us  # Increased step time for better convergence
@@ -150,33 +158,44 @@ def test_am_full_circuit():
     # scenario1_vi_points = [0, 0]
     # scenario2_vi_points = [Vdd, Vdd]
     # Towards satisfied
-    scenario1_vi_points = [Vdd/2, 0, 0]
-    scenario2_vi_points = [Vdd/2, Vdd, Vdd]
+    scenario1_vi_points = [Vdd] + [0] * 5
+    scenario2_vi_points = [0] + [Vdd] * 5
 
     # Run both scenarios with better error handling
     try:
         # Try to run both scenarios
         analysis1 = simulate_scenario("Scenario 1 (cmi=-1)", scenario1_cmis, scenario1_vi_points)
         analysis2 = simulate_scenario("Scenario 2 (cmi=1)", scenario2_cmis, scenario2_vi_points)
-        
+
         # Process and plot results
         time1 = np.array(analysis1.time)
         vam1 = np.array(analysis1['vam'])
         vi1 = np.array(analysis1['vi'])
-        
+        vi_bar1 = np.array(analysis1['xam_full.xvar_res11.vi_bar'])
+
         time2 = np.array(analysis2.time)
         vam2 = np.array(analysis2['vam'])
         vi2 = np.array(analysis2['vi'])
+        vi_bar2 = np.array(analysis2['xam_full.xvar_res11.vi_bar'])
         
         # Create plots
         plt.figure(figsize=(15, 15))
 
         EPS = 0.01
+
+        # Print min and max of vi_bar
+        # print("analysis1 nodes:")
+        # for key in analysis1.nodes.keys():
+        #     print(f"{key}: {np.min(analysis1[key])}, {np.max(analysis1[key])}")
+        # print("analysis2 nodes:")
+        # for key in analysis2.nodes.keys():
+        #     print(f"{key}: {np.min(analysis2[key])}, {np.max(analysis2[key])}")
         
         # Plot for Scenario 1
         plt.subplot(2, 2, 1)
         plt.plot(time1 * 1000, vam1, 'b-', linewidth=2, label='Vam')
         plt.plot(time1 * 1000, vi1, 'b--', linewidth=1, label='Vi')
+        plt.plot(time1 * 1000, vi_bar1, 'g-', linewidth=1, label='Vi_bar')
         plt.xlabel('Time [ms]')
         plt.ylabel('Voltage [V]')
         plt.ylim(-EPS, Vdd+EPS)
@@ -188,6 +207,7 @@ def test_am_full_circuit():
         plt.subplot(2, 2, 2)
         plt.plot(time2 * 1000, vam2, 'r-', linewidth=2, label='Vam')
         plt.plot(time2 * 1000, vi2, 'r--', linewidth=1, label='Vi')
+        plt.plot(time2 * 1000, vi_bar2, 'g-', linewidth=1, label='Vi_bar')
         plt.xlabel('Time [ms]')
         plt.ylabel('Voltage [V]')
         plt.ylim(-EPS, Vdd+EPS)
