@@ -90,19 +90,19 @@ def create_3sat_circuit(clauses, variable_names):
     var_nodes = [f'var_{name}' for name in variable_names]
     
     # Set a common capacitance value for all components
-    C = 1e-9  # 1nF
-    R_aux = 20e3  # 20kΩ
+    C = 1e-6  # 1000nF
+    R_aux = 150e3  # 150kΩ
     C_aux = 1e-6  # 1000nF
      
     # Create Variable subcircuits for each variable
     variables = []
     for i, name in enumerate(variable_names):
-        var = Variable(C=C)
+        var = Variable(C=C, bounded=True)
         variables.append(var)
         circuit.subcircuit(var)
         
         # Instantiate the Variable subcircuit
-        circuit.X(f'var_{name}', var.name, var_nodes[i], circuit.gnd)
+        circuit.X(f'var_{name}', var.name, var_nodes[i], 'vdd', circuit.gnd)
     
     # Create Clause subcircuits for each clause
     for i, clause in enumerate(clauses):
@@ -128,7 +128,7 @@ def create_3sat_circuit(clauses, variable_names):
     return circuit
 
 
-def run_3sat_simulation(circuit, variable_names, clauses, simulation_time, step_time):
+def run_3sat_simulation(circuit: Circuit, variable_names, clauses, simulation_time, step_time):
     """
     Run a transient simulation on the 3-SAT circuit.
     
@@ -158,6 +158,10 @@ def run_3sat_simulation(circuit, variable_names, clauses, simulation_time, step_
         method='gear',   # Integration method (alternatives: 'trap', 'euler')
         maxord=2         # Maximum order for integration method
     )
+
+    # Print all available options
+    # print(simulator._options)
+    # raise Exception("Stop here")
     
     # Set initial conditions for variable nodes to help convergence
     # Initialize all variables to 0.5V (middle value)
@@ -177,7 +181,7 @@ def run_3sat_simulation(circuit, variable_names, clauses, simulation_time, step_
     # Run transient analysis
     analysis = simulator.transient(step_time=step_time, end_time=simulation_time)
     
-    return analysis
+    return analysis, simulation_time
 
 
 MAX_CLAUSES_PLOTTED = 10
@@ -283,11 +287,7 @@ def plot_3sat_results(analysis, variable_names, clauses, file_name, show_plot=Tr
                 bbox=dict(facecolor='purple', alpha=0.2))
     
     # Add a common x-label for all subplots with proper formatting
-    plt.xlabel('Time (milliseconds)')
-    
-    # Format the x-axis ticks to show milliseconds
-    for ax in axes:
-        ax.set_xticklabels([f'{x*1000:.2f}' for x in ax.get_xticks()])
+    plt.xlabel('Time (seconds)')
 
     # Adjust layout to prevent overlap
     plt.tight_layout()
@@ -300,6 +300,33 @@ def plot_3sat_results(analysis, variable_names, clauses, file_name, show_plot=Tr
         plt.show()
     else:
         plt.close(fig)
+
+def plot_3sat_evolution(analysis, variable_names, clauses, file_name, show_plot=True):
+    count_satisfied_list = []
+    satisfied_at_idx = -1
+    for i in range(len(analysis.time)):
+        results, _ = interpret_results(analysis, variable_names, i)
+        satisfies_all, count_satisfied, _ = verify_results(clauses, results, variable_names)
+        count_satisfied_list.append(count_satisfied)
+        if satisfies_all and satisfied_at_idx == -1:
+            satisfied_at_idx = i
+
+    times = np.array(analysis.time)
+    plt.plot(times, count_satisfied_list)
+    # Also add a vertical line at time when satisfies_all is true
+    plt.axvline(x=times[satisfied_at_idx], color='red', linestyle='--', label='All clauses satisfied')
+    plt.xlabel('Time (milliseconds)')
+    plt.ylabel('Number of clauses satisfied')
+    plt.savefig(f'graphs/{file_name}_evolution.png', dpi=300, bbox_inches='tight')
+
+    # Only show the plot if requested
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
+
+    return times[satisfied_at_idx]
+
 
 
 def interpret_results(analysis, variable_names, at=-1):
@@ -373,7 +400,7 @@ def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(description='Solve a 3-SAT problem using an analog circuit simulator.')
     parser.add_argument('--cnf', type=str, help='Path to the CNF file')
-    parser.add_argument('--sim-time', type=float, default=1, help='Simulation time in seconds')
+    parser.add_argument('--sim-time', type=float, default=20, help='Simulation time in seconds')
     parser.add_argument('--step-time', type=float, default=1e-3, help='Simulation step time in seconds')
     args = parser.parse_args()
     
@@ -398,7 +425,7 @@ def main():
     
     # Run the simulation
     print("\nRunning simulation...")
-    analysis = run_3sat_simulation(circuit, variable_names, clauses,
+    analysis, _ = run_3sat_simulation(circuit, variable_names, clauses,
                                   simulation_time=args.sim_time, 
                                   step_time=args.step_time)
     
@@ -425,23 +452,7 @@ def main():
     for clause in not_satisfied:
         print(f"Clause {clause + 1} is not satisfied!")
 
-    count_satisfied_list = []
-    satisfied_at = -1
-    for i in range(len(analysis.time)):
-        results, final_voltages = interpret_results(analysis, variable_names, i)
-        satisfies_all, count_satisfied, _ = verify_results(clauses, results, variable_names)
-        count_satisfied_list.append(count_satisfied)
-        if satisfies_all and satisfied_at == -1:
-            satisfied_at = i
-
-    times = np.array(analysis.time)
-    plt.plot(times, count_satisfied_list)
-    # Also add a vertical line at time when satisfies_all is true
-    plt.axvline(x=times[satisfied_at], color='red', linestyle='--', label='Satisfies all')
-    plt.xlabel('Time (milliseconds)')
-    plt.ylabel('Count satisfied')
-    plt.savefig(f'graphs/{args.cnf.split("/")[-1].split(".")[0]}_count_satisfied.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    plot_3sat_evolution(analysis, variable_names, clauses, args.cnf.split("/")[-1].split(".")[0])
 
 
 if __name__ == '__main__':

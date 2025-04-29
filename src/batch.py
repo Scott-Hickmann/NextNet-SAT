@@ -6,13 +6,13 @@ import json
 from datetime import datetime
 import re
 
-from main import load_cnf_file, create_3sat_circuit, run_3sat_simulation, interpret_results, plot_3sat_results
+from main import load_cnf_file, create_3sat_circuit, run_3sat_simulation, interpret_results, verify_results, plot_3sat_results, plot_3sat_evolution
 
 # Configuration
 CNF_FOLDER = 'cnf'
 RESULTS_CSV = 'results/results.csv'
 GRAPHS_FOLDER = 'graphs'
-SIMULATION_TIME = 10  # seconds
+SIMULATION_TIME = 20  # seconds
 STEP_TIME = 1e-3  # seconds
 
 def run_simulation(cnf_file):
@@ -34,7 +34,7 @@ def run_simulation(cnf_file):
     circuit = create_3sat_circuit(clauses, variable_names)
     
     # Run the simulation
-    analysis = run_3sat_simulation(circuit, variable_names, 
+    analysis, simulation_time = run_3sat_simulation(circuit, variable_names, clauses,
                                   simulation_time=SIMULATION_TIME, 
                                   step_time=STEP_TIME)
     
@@ -42,39 +42,26 @@ def run_simulation(cnf_file):
     base_filename = os.path.splitext(os.path.basename(cnf_file))[0]
     
     # Plot the evolution and save to file (without showing the plot)
-    plot_3sat_results(analysis, variable_names, base_filename, show_plot=False)
+    plot_3sat_results(analysis, variable_names, clauses, base_filename, show_plot=False)
+    satisfied_at = plot_3sat_evolution(analysis, variable_names, clauses, base_filename, show_plot=False)
     
     # Interpret the results
     results, final_voltages = interpret_results(analysis, variable_names)
     
     # Count satisfied clauses
-    satisfied_count = 0
-    total_clauses = len(clauses)
-    
-    for clause in clauses:
-        clause_satisfied = False
-        for var_idx, is_negated in clause:
-            var_name = variable_names[var_idx]
-            var_value = results[var_name]
-            if var_value is None:
-                continue  # Skip undecided variables
-            
-            # Check if this literal satisfies the clause
-            if (not is_negated and var_value) or (is_negated and not var_value):
-                clause_satisfied = True
-                break
-        
-        if clause_satisfied:
-            satisfied_count += 1
+    all_satisfied, satisfied_count, not_satisfied = verify_results(clauses, results, variable_names)
+    print(f"Not satisfied clauses (1-indexed): {[x + 1 for x in not_satisfied]}")
     
     # Prepare the result dictionary
     result = {
         'file_name': os.path.basename(cnf_file),
         'satisfied_clauses': satisfied_count,
-        'total_clauses': total_clauses,
-        'all_satisfied': satisfied_count == total_clauses,
+        'total_clauses': len(clauses),
+        'all_satisfied': all_satisfied,
+        'satisfied_at': f"{satisfied_at:.3f}",
+        'finished_at': f"{simulation_time:.3f}",
         'voltages': final_voltages,
-        'plot_file': f'graphs/{base_filename}.png'
+        'plot_file': f'graphs/{base_filename}.png',
     }
     
     return result
@@ -102,7 +89,7 @@ def main():
     with open(RESULTS_CSV, 'a', newline='') as csvfile:
         # Define the CSV columns
         fieldnames = ['timestamp', 'file_name', 'satisfied_clauses', 'total_clauses', 
-                     'all_satisfied', 'voltages', 'plot_file']
+                     'all_satisfied', 'satisfied_at', 'finished_at', 'voltages', 'plot_file']
         
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         
