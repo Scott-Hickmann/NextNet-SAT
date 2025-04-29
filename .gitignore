@@ -11,3 +11,5 @@ wheels/
 
 # .DS_Store
 .DS_Store
+
+graphs/ideal_aux/*
