@@ -135,8 +135,8 @@ def run_3sat_simulation(circuit: Circuit, variable_names, clauses, simulation_ti
     Args:
         circuit: The PySpice Circuit object
         variable_names: List of variable names
-        simulation_time: Total simulation time in seconds
-        step_time: Time step for the simulation in seconds
+        simulation_time: Total simulation time in ms
+        step_time: Time step for the simulation in ms
         
     Returns:
         The simulation results
@@ -179,7 +179,7 @@ def run_3sat_simulation(circuit: Circuit, variable_names, clauses, simulation_ti
         simulator.initial_condition(**initial_conditions)
     
     # Run transient analysis
-    analysis = simulator.transient(step_time=step_time, end_time=simulation_time)
+    analysis = simulator.transient(step_time=step_time * 1e-3, end_time=simulation_time * 1e-3)
     
     return analysis, simulation_time
 
@@ -441,6 +441,9 @@ def verify_results(clauses, results, variable_names):
 
     return satisfies_all, count_satisfied, not_satisfied
 
+SIMULATION_TIME = 200
+STEP_TIME = 10e-3
+
 def main():
     """
     Main function to solve a 3-SAT problem from a CNF file.
@@ -448,8 +451,8 @@ def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(description='Solve a 3-SAT problem using an analog circuit simulator.')
     parser.add_argument('--cnf', type=str, help='Path to the CNF file')
-    parser.add_argument('--sim-time', type=float, default=200, help='Simulation time in milliseconds')
-    parser.add_argument('--step-time', type=float, default=10e-3, help='Simulation step time in milliseconds')
+    parser.add_argument('--sim-time', type=float, default=SIMULATION_TIME, help='Simulation time in milliseconds')
+    parser.add_argument('--step-time', type=float, default=STEP_TIME, help='Simulation step time in milliseconds')
     args = parser.parse_args()
     
     # If no CNF file is provided, use the default example
@@ -474,8 +477,8 @@ def main():
     # Run the simulation
     print("\nRunning simulation...")
     analysis, _ = run_3sat_simulation(circuit, variable_names, clauses,
-                                  simulation_time=args.sim_time * 1e-3, 
-                                  step_time=args.step_time * 1e-3)
+                                  simulation_time=args.sim_time, 
+                                  step_time=args.step_time)
     
     # Plot the results
     plot_3sat_results(analysis, variable_names, clauses, args.cnf.split("/")[-1].split(".")[0])

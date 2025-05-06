@@ -6,14 +6,12 @@ import json
 from datetime import datetime
 import re
 
-from main import load_cnf_file, create_3sat_circuit, run_3sat_simulation, interpret_results, verify_results, plot_3sat_results, plot_3sat_evolution
+from main import load_cnf_file, create_3sat_circuit, run_3sat_simulation, interpret_results, verify_results, plot_3sat_results, plot_3sat_evolution, SIMULATION_TIME, STEP_TIME
 
 # Configuration
 CNF_FOLDER = 'cnf'
 RESULTS_CSV = 'results/results.csv'
 GRAPHS_FOLDER = 'graphs'
-SIMULATION_TIME = 20  # seconds
-STEP_TIME = 1e-3  # seconds
 
 def run_simulation(cnf_file):
     """
