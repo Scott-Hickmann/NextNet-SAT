@@ -90,9 +90,9 @@ def create_3sat_circuit(clauses, variable_names):
     var_nodes = [f'var_{name}' for name in variable_names]
     
     # Set a common capacitance value for all components
-    C = 1e-6  # 1000nF
-    R_aux = 150e3  # 150kΩ
-    C_aux = 1e-6  # 1000nF
+    C = 10e-9  # 10nF
+    R_aux = 15e3  # 15kΩ
+    C_aux = 10e-9  # 10nF
      
     # Create Variable subcircuits for each variable
     variables = []
@@ -215,7 +215,7 @@ def plot_3sat_results(analysis, variable_names, clauses, file_name, show_plot=Tr
         # Check if the node exists in the analysis results
         if node_name in analysis.nodes:
             # Plot the variable voltage
-            ax.plot(analysis.time, analysis[node_name], label=f'Variable {name}', linewidth=2)
+            ax.plot(analysis.time * 1e3, analysis[node_name], label=f'Variable {name}', linewidth=2)
             
             # Add horizontal lines at 0.25V and 0.75V to indicate decision thresholds
             ax.axhline(y=0.25, color='r', linestyle='--', alpha=0.5, label='False threshold (0.25V)')
@@ -267,8 +267,8 @@ def plot_3sat_results(analysis, variable_names, clauses, file_name, show_plot=Tr
         node_name = f'xclause_{i}.vam'
         
         # Plot the clause vam voltage
-        ax.plot(analysis.time, analysis[node_name], label=f'Clause {i+1} vam', linewidth=2, color='purple')
-        ax.plot(analysis.time, analysis[f'n1_{i}'], label=f'Clause {i+1} n1', linewidth=2, color='green')
+        ax.plot(analysis.time * 1e3, analysis[node_name], label=f'Clause {i+1} vam', linewidth=2, color='purple')
+        ax.plot(analysis.time * 1e3, analysis[f'n1_{i}'], label=f'Clause {i+1} n1', linewidth=2, color='green')
         
         # Add a title and y-label for this subplot
         ax.set_title(f'Clause {i+1} vam')
@@ -287,7 +287,7 @@ def plot_3sat_results(analysis, variable_names, clauses, file_name, show_plot=Tr
                 bbox=dict(facecolor='purple', alpha=0.2))
     
     # Add a common x-label for all subplots with proper formatting
-    plt.xlabel('Time (seconds)')
+    plt.xlabel('Time (milliseconds)')
 
     # Adjust layout to prevent overlap
     plt.tight_layout()
@@ -311,7 +311,7 @@ def plot_3sat_evolution(analysis, variable_names, clauses, file_name, show_plot=
         if satisfies_all and satisfied_at_idx == -1:
             satisfied_at_idx = i
 
-    times = np.array(analysis.time)
+    times = np.array(analysis.time) * 1e3
     plt.plot(times, count_satisfied_list)
     # Also add a vertical line at time when satisfies_all is true
     plt.axvline(x=times[satisfied_at_idx], color='red', linestyle='--', label='All clauses satisfied')
@@ -400,8 +400,8 @@ def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(description='Solve a 3-SAT problem using an analog circuit simulator.')
     parser.add_argument('--cnf', type=str, help='Path to the CNF file')
-    parser.add_argument('--sim-time', type=float, default=20, help='Simulation time in seconds')
-    parser.add_argument('--step-time', type=float, default=1e-3, help='Simulation step time in seconds')
+    parser.add_argument('--sim-time', type=float, default=200, help='Simulation time in milliseconds')
+    parser.add_argument('--step-time', type=float, default=10e-3, help='Simulation step time in milliseconds')
     args = parser.parse_args()
     
     # If no CNF file is provided, use the default example
@@ -426,8 +426,8 @@ def main():
     # Run the simulation
     print("\nRunning simulation...")
     analysis, _ = run_3sat_simulation(circuit, variable_names, clauses,
-                                  simulation_time=args.sim_time, 
-                                  step_time=args.step_time)
+                                  simulation_time=args.sim_time * 1e-3, 
+                                  step_time=args.step_time * 1e-3)
     
     # Plot the results
     plot_3sat_results(analysis, variable_names, clauses, args.cnf.split("/")[-1].split(".")[0])
