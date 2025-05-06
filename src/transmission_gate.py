@@ -3,6 +3,7 @@ from PySpice.Spice.Netlist import Circuit, SubCircuitFactory
 from PySpice.Unit import u_V, u_Ohm
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.optimize import curve_fit
 
 
 class TransmissionGate(SubCircuitFactory):
@@ -34,7 +35,7 @@ class TransmissionGate(SubCircuitFactory):
         self.M(2, 'output', 'enable_bar', 'input', 'vdd', model='PMOS', w=8, l=0.5)  # Wider width, shorter length
         
         # Higher resistance to ensure sharper transition
-        self.R('leak', 'input', 'output', 500e3@u_Ohm)  # Increased from 500k to 5M ohms
+        # self.R('leak', 'input', 'output', 500e3@u_Ohm)  # Increased from 500k to 5M ohms
 
 
 def test_resistive_behavior():
@@ -193,7 +194,8 @@ def test_enable_sweep():
     num_steps = 1001
     
     # Arrays to store results
-    enable_values = np.linspace(0, vdd, num_steps)
+    epsilon = 1e-2
+    enable_values = np.linspace(epsilon, vdd, num_steps)
     output_voltages = np.zeros(num_steps)
     resistances = np.zeros(num_steps)
     
@@ -218,12 +220,8 @@ def test_enable_sweep():
         current = output_voltages[i] / R_load
         
         # Calculate resistance (avoid division by zero)
-        epsilon = 1e-10
-        if current > epsilon:
-            resistances[i] = voltage_drop / current
-        else:
-            resistances[i] = 1e6  # Very high resistance when current is near zero
-    
+        resistances[i] = voltage_drop / current
+
     # Find transition points for better analysis
     transition_indices = []
     for i in range(1, len(output_voltages)-1):
@@ -248,13 +246,31 @@ def test_enable_sweep():
     for idx in transition_indices:
         plt.axvline(x=enable_values[idx], color='g', linestyle=':', alpha=0.7)
     
+    # Add theoretical 1/V_enable curve
+    # Avoid division by zero by adding a small epsilon
+    # Value at v_enable = 1
+    # res_at_epsilon = resistances[0]
+    # multiplier = res_at_epsilon * epsilon
+    # theoretical_res = np.zeros_like(enable_values)
+    # for i, en_val in reversed(list(enumerate(enable_values))):
+    #     theoretical_res[i] = multiplier / en_val
+    # print(f"1/x scaled by {res_at_epsilon}")
+
+    def model(x, a):
+        return a / x
+    params, _ = curve_fit(model, enable_values, resistances)
+    print(f"R = {params[0]} / V_enable")
+    theoretical_res = params[0] / enable_values
+    
     # Plot 2: Resistance vs Enable
     plt.subplot(2, 1, 2)
-    plt.plot(enable_values, resistances / 1000, 'g-')
+    plt.plot(enable_values, resistances / 1000, 'g-', label='Actual Resistance')
+    plt.plot(enable_values, theoretical_res / 1000, 'r--', label='Theoretical')
     plt.xlabel('Enable Voltage [V]')
     plt.ylabel('Resistance [kΩ]')
     plt.title('Transmission Gate Resistance vs Enable Voltage')
     plt.grid(True)
+    plt.legend()
     
     # Add vertical lines at transition points if any were found
     for idx in transition_indices:

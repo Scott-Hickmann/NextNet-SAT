@@ -50,6 +50,7 @@ class Clause(SubCircuit):
             raise ValueError("0 is not allowed as a control value")
         
         am = AMNewCircuit(cm1=cm1, cm2=cm2, cm3=cm3, R=R_aux, C=C_aux)
+        # am = AMFull(cm1=cm1, cm2=cm2, cm3=cm3, C=C_aux, gain=2)
         self.subcircuit(am)
         
         # Instantiate the AMFull subcircuit
