@@ -186,7 +186,7 @@ def run_3sat_simulation(circuit: Circuit, variable_names, clauses, simulation_ti
 
 MAX_CLAUSES_PLOTTED = 10
 
-def plot_3sat_results(analysis, variable_names, clauses, file_name, show_plot=True):
+def plot_3sat_results_full(analysis, variable_names, clauses, file_name, show_plot=True):
     """
     Plot the results of the 3-SAT simulation with each variable on its own graph.
     
@@ -300,6 +300,54 @@ def plot_3sat_results(analysis, variable_names, clauses, file_name, show_plot=Tr
         plt.show()
     else:
         plt.close(fig)
+
+def plot_3sat_results(analysis, variable_names, clauses, file_name, show_plot=True):
+    """
+    Plot the results of the 3-SAT simulation with variables overlayed, and clauses overlayed.
+    
+    Args:
+        analysis: The simulation results
+        variable_names: List of variable names
+        file_name: Base name for the output file (without extension)
+        show_plot: Whether to display the plot (default: True)
+    """
+    # Plot each variable on its own subplot
+    for i, name in enumerate(variable_names):
+        node_name = f'var_{name}'
+        final_voltage = float(analysis[node_name][-1])
+        satisfied_text = "True" if final_voltage > 0.5 else "False"
+        plt.plot(analysis.time * 1e3, analysis[node_name], label=f'$V_{i + 1}$ ({satisfied_text})')
+            
+    # Add a title and y-label for this subplot
+    # plt.title('Evolution of variable voltages over time')
+    plt.xlabel('Time (milliseconds)')
+    plt.ylabel('Voltage (V)')
+    plt.legend()
+
+    # Save the plot
+    plt.savefig(f'graphs/{file_name}_variables.png', dpi=300, bbox_inches='tight')
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
+
+    # Plot each clause's vam node
+    for i in range(len(clauses)):
+        node_name = f'xclause_{i}.vam'
+        plt.plot(analysis.time * 1e3, analysis[node_name], label=f'$V_{{a_{i + 1}}}$')
+        
+    # Add a title and y-label for this subplot
+    # plt.title('Evolution of clause auxiliary node voltages over time')
+    plt.xlabel('Time (milliseconds)')
+    plt.ylabel('Voltage (V)')
+    plt.legend()
+    
+    # Save the plot
+    plt.savefig(f'graphs/{file_name}_clauses.png', dpi=300, bbox_inches='tight')
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
 
 def plot_3sat_evolution(analysis, variable_names, clauses, file_name, show_plot=True):
     count_satisfied_list = []
