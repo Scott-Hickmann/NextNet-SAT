@@ -4,7 +4,7 @@ from PySpice.Unit import u_ms, u_us, u_F, u_Ω, u_V
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-
+from and_circuit import AndGate
 from branch_voltage import TernaryMultiplexer
 
 class AMNewCircuit(SubCircuit):
@@ -36,24 +36,24 @@ class AMNewCircuit(SubCircuit):
         """
         super().__init__(f'AMCircuit_{cm1}_{cm2}_{cm3}_{R}_{C}', *self.NODES)
         
-        # Create and add the ternary multiplexers
+        # # Create and add the ternary multiplexers
         mux1 = TernaryMultiplexer(cmi=-cm1)
         mux2 = TernaryMultiplexer(cmi=-cm2)
         mux3 = TernaryMultiplexer(cmi=-cm3)
         
-        # Create and add the NOR gate
-        # nor_gate = NorGate()
+        # # Create and add the NOR gate
+        nor_gate = AndGate()
         
         # Add the subcircuits
         self.subcircuit(mux1)
         self.subcircuit(mux2)
         self.subcircuit(mux3)
-        # self.subcircuit(nor_gate)
+        self.subcircuit(nor_gate)
 
         mux1_out = 'mux1_out'
         mux2_out = 'mux2_out'
         mux3_out = 'mux3_out'
-        # nor12_out = 'nor12_out'
+        nor12_out = 'nor12_out'
         nor123_out = 'nor123_out'
         gain_node = 'gain_node'
         
@@ -63,21 +63,26 @@ class AMNewCircuit(SubCircuit):
         self.X('mux3', mux3.name, 'vi3', mux3_out, 'vdd', 'gnd')
 
         # Instantiate the NOR gate to compute V(vi1)*V(vi2)*V(vi3)
-        # self.X('nor12', nor_gate.name, mux1_out, mux2_out, nor12_out, 'vdd', 'gnd')
-        # self.X('nor123', nor_gate.name, nor12_out, mux3_out, nor123_out, 'vdd', 'gnd')
-        self.B('nor123', nor123_out, 'gnd', v='V(mux1_out)*V(mux2_out)*V(mux3_out)')
+        self.X('nor12', nor_gate.name, mux1_out, mux2_out, nor12_out, 'vdd', 'gnd')
+        self.X('nor123', nor_gate.name, nor12_out, mux3_out, nor123_out, 'vdd', 'gnd')
+        # self.B('nor123', nor123_out, 'gnd', v='V(mux1_out)*V(mux2_out)*V(mux3_out)')
 
         # Add 1V power supply to get V(vi1)*V(vi2)*V(vi3) + 1V
         self.V('gain_node', gain_node, nor123_out, 1@u_V)
         
         # Add RC circuit with initial condition capability
         self.R('1', 'n1', 'vam', R@u_Ω)
+        # variable_resistance = VariableResistance(cmi=-1)
+        # self.subcircuit(variable_resistance)
+        # self.X('var_res', variable_resistance.name, gain_node, 'n1', 'vam', 'vdd', 'gnd')
+        
         self.C('1', 'n1', 'gnd', C@u_F)
         
         # Add controlled source with feedback to create exponential growth
         # The growth rate is determined by: growth_rate = (gain-1)/(RC)
         # E <name> <out+> <out-> <in+> <in-> <gain>
         self.B('amp', 'vam', 'gnd', v='V(gain_node)*V(n1)')
+        # self.VCVS('amp', 'vam', 'gnd', 'n1', 'gnd', voltage_gain=2)
 
 
 def simulate_am_circuit():
@@ -85,7 +90,8 @@ def simulate_am_circuit():
     Simulate the AM circuit and plot the output.
     """
     # Define component values
-    R = 10e3
+    # R = 10e3
+    R = 15990
     C = 0.01e-6
 
     # Set simulation parameters
