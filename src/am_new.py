@@ -91,12 +91,13 @@ def simulate_am_circuit():
     """
     # Define component values
     # R = 10e3
-    R = 15990
-    C = 0.01e-6
+
+    R = 15e3  # 15kΩ
+    C = 10e-9  # 10nF
 
     # Set simulation parameters
     step_time = 1@u_us  # Larger step size for more stable solution
-    end_time = 0.5@u_ms  # Simulation duration
+    end_time = 500@u_us  # Simulation duration
     
     # Create figures for combined plots
     fig1 = plt.figure(figsize=(15, 10))
@@ -110,7 +111,7 @@ def simulate_am_circuit():
     all_growth_rates = []
     all_labels = []
 
-    n1_init = 0.01
+    n1_init = 1.0
     cases = [
         {'vi1': 0.0, 'vi2': 0.0, 'vi3': 0.0, 'cm1': 1, 'cm2': 1, 'cm3': 1},
         {'vi1': 0.0, 'vi2': 0.0, 'vi3': 0.0, 'cm1': -1, 'cm2': -1, 'cm3': -1},
@@ -164,15 +165,14 @@ def simulate_am_circuit():
         
         # Set analysis parameters to improve convergence
         simulator.options(
-            reltol=1e-2,       # Reasonable tolerance 
-            abstol=1e-4,       # Reasonable absolute tolerance
-            method='trap',     # Trapezoidal integration method
-            gmin=1e-9,         # Minimum conductance
-            maxord=2,          # Maximum order for integration method
-            itl1=500,          # Increased DC iteration limit
-            itl4=2000,         # Increased transient iteration limit
-            maxstep=10e-6,     # Larger maximum time step
-            uic=True           # Use initial conditions (crucial for correct behavior)
+            reltol=1e-2,     # Relaxed relative tolerance (was 1e-3)
+            abstol=1e-5,     # Relaxed absolute tolerance (was 1e-6)
+            itl1=500,        # Increased DC iteration limit (was 100)
+            itl2=200,        # Increased DC transfer curve iteration limit (was 50)
+            itl4=100,        # Transient analysis iteration limit
+            gmin=1e-10,      # Minimum conductance
+            method='gear',   # Integration method (alternatives: 'trap', 'euler')
+            maxord=2         # Maximum order for integration method
         )
         
         # Run transient simulation
@@ -211,22 +211,23 @@ def simulate_am_circuit():
         all_labels.append(f'R = {R/1000:.1f} kΩ')
     
         # Plot on the combined figures
-        plotted = ax1.plot(time * 1000, vam, linestyle='-', linewidth=1, label=f'vi1={vi1}, vi2={vi2}, vi3={vi3}, cm1={cm1}, cm2={cm2}, cm3={cm3}')
-        color = plotted[0].get_color()
-        ax1.plot(time * 1000, vam_theory, linestyle='--', linewidth=2, label=f'Theoretical vi1={vi1}, vi2={vi2}, vi3={vi3}, cm1={cm1}, cm2={cm2}, cm3={cm3}', color=color)
-        ax2.semilogy(time * 1000, np.abs(vam), linewidth=2, label=f'vi1={vi1}, vi2={vi2}, vi3={vi3}, cm1={cm1}, cm2={cm2}, cm3={cm3}')
+        label = f'$V_{{i_1}}={vi1}$ V, $V_{{i_2}}={vi2}$ V, $V_{{i_3}}={vi3}$ V, $c_{{m,i_1}}={cm1}$, $c_{{m,i_2}}={cm2}$, $c_{{m,i_3}}={cm3}$'
+        plotted = ax1.plot(time * 1000000, vam, linestyle='-', linewidth=2, label=label)  # noqa: F841
+        # color = plotted[0].get_color()
+        # ax1.plot(time * 1000000, vam_theory, linestyle='--', linewidth=2, label=f'Theoretical vi1={vi1}, vi2={vi2}, vi3={vi3}, cm1={cm1}, cm2={cm2}, cm3={cm3}', color=color)
+        ax2.semilogy(time * 1000000, np.abs(vam), linewidth=2, label=label)
     
     # Format the first figure (linear and log plots)
-    ax1.set_xlabel('Time [ms]', fontsize=12)
+    ax1.set_xlabel('Time [$\mu$s]', fontsize=12)
     ax1.set_ylabel('Output Voltage (Vam) [V]', fontsize=12)
-    ax1.set_title('AM Circuit Output Voltage vs Time (All Resistances)', fontsize=14)
-    ax1.set_ylim(0, 1)
+    ax1.set_title('$V_{{a_m}}$ vs Time', fontsize=14)
+    ax1.set_ylim(0, 20)
     ax1.grid(True)
     ax1.legend(fontsize=10)
     
-    ax2.set_xlabel('Time [ms]', fontsize=12)
+    ax2.set_xlabel('Time [$\mu$s]', fontsize=12)
     ax2.set_ylabel('|Output Voltage| (Log Scale) [V]', fontsize=12)
-    ax2.set_title('AM Circuit Output Voltage - Log Scale (All Resistances)', fontsize=14)
+    ax2.set_title('$V_{{a_m}}$ vs Time - Log Scale', fontsize=14)
     ax2.grid(True)
     ax2.legend(fontsize=10)
     
