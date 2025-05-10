@@ -316,13 +316,14 @@ def plot_3sat_results(analysis, variable_names, clauses, file_name, show_plot=Tr
         node_name = f'var_{name}'
         final_voltage = float(analysis[node_name][-1])
         satisfied_text = "True" if final_voltage > 0.5 else "False"
-        plt.plot(analysis.time * 1e3, analysis[node_name], label=f'$V_{i + 1}$ ({satisfied_text})')
+        plt.plot(analysis.time * 1e3, analysis[node_name], label=f'$V_{{{i + 1}}}$ ({satisfied_text})')
             
     # Add a title and y-label for this subplot
     # plt.title('Evolution of variable voltages over time')
     plt.xlabel('Time (milliseconds)')
     plt.ylabel('Voltage (V)')
     plt.legend()
+    plt.tight_layout()
 
     # Save the plot
     plt.savefig(f'graphs/{file_name}_variables.png', dpi=300, bbox_inches='tight')
@@ -334,13 +335,14 @@ def plot_3sat_results(analysis, variable_names, clauses, file_name, show_plot=Tr
     # Plot each clause's vam node
     for i in range(len(clauses)):
         node_name = f'xclause_{i}.vam'
-        plt.plot(analysis.time * 1e3, analysis[node_name], label=f'$V_{{a_{i + 1}}}$')
+        plt.plot(analysis.time * 1e3, analysis[node_name], label=f'$V_{{a_{{{i + 1}}}}}$')
         
     # Add a title and y-label for this subplot
     # plt.title('Evolution of clause auxiliary node voltages over time')
     plt.xlabel('Time (milliseconds)')
     plt.ylabel('Voltage (V)')
     plt.legend()
+    plt.tight_layout()
     
     # Save the plot
     plt.savefig(f'graphs/{file_name}_clauses.png', dpi=300, bbox_inches='tight')
