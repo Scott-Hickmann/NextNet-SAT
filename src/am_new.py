@@ -119,7 +119,8 @@ def simulate_am_circuit():
         {'vi1': 1.0, 'vi2': 1.0, 'vi3': 1.0, 'cm1': -1, 'cm2': -1, 'cm3': -1},
     ]
     
-    for case in cases:
+    ls=[(5,(5, 5)), (5,(5, 5)),(0,(5, 5)),(0,(5, 5))]
+    for i, case in enumerate(cases):
         vi1 = case['vi1']
         vi2 = case['vi2']
         vi3 = case['vi3']
@@ -212,10 +213,10 @@ def simulate_am_circuit():
     
         # Plot on the combined figures
         label = f'$V_{{i_1}}={vi1}$ V, $V_{{i_2}}={vi2}$ V, $V_{{i_3}}={vi3}$ V, $c_{{m,i_1}}={cm1}$, $c_{{m,i_2}}={cm2}$, $c_{{m,i_3}}={cm3}$'
-        plotted = ax1.plot(time * 1000000, vam, linestyle='-', linewidth=2, label=label)  # noqa: F841
+        plotted = ax1.plot(time * 1000000, vam, linestyle=ls[i], linewidth=2, label=label)  # noqa: F841
         # color = plotted[0].get_color()
         # ax1.plot(time * 1000000, vam_theory, linestyle='--', linewidth=2, label=f'Theoretical vi1={vi1}, vi2={vi2}, vi3={vi3}, cm1={cm1}, cm2={cm2}, cm3={cm3}', color=color)
-        ax2.semilogy(time * 1000000, np.abs(vam), linewidth=2, label=label)
+        ax2.semilogy(time * 1000000, np.abs(vam), linestyle=ls[i], linewidth=2, label=label)
     
     # Format the first figure (linear and log plots)
     ax1.set_xlabel('Time [$\mu$s]', fontsize=12)
