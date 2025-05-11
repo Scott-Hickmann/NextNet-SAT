@@ -3,10 +3,12 @@ from PySpice.Spice.Netlist import Circuit
 import matplotlib.pyplot as plt
 import argparse
 import os
+import numpy as np
 from pysat.formula import CNF
 
 from clause import Clause
 from variable import Variable
+from config import USE_AUX
 
 
 def load_cnf_file(cnf_file_path):
@@ -89,17 +91,19 @@ def create_3sat_circuit(clauses, variable_names):
     var_nodes = [f'var_{name}' for name in variable_names]
     
     # Set a common capacitance value for all components
-    C = 1e-9  # 1nF
-    
+    C = 10e-9  # 10nF
+    R_aux = 15e3  # 15kΩ
+    C_aux = 10e-9  # 10nF
+     
     # Create Variable subcircuits for each variable
     variables = []
     for i, name in enumerate(variable_names):
-        var = Variable(C=C)
+        var = Variable(C=C, bounded=True)
         variables.append(var)
         circuit.subcircuit(var)
         
         # Instantiate the Variable subcircuit
-        circuit.X(f'var_{name}', var.name, var_nodes[i], circuit.gnd)
+        circuit.X(f'var_{name}', var.name, var_nodes[i], 'vdd', circuit.gnd)
     
     # Create Clause subcircuits for each clause
     for i, clause in enumerate(clauses):
@@ -110,29 +114,30 @@ def create_3sat_circuit(clauses, variable_names):
             cm_values.append(-1 if is_negated else 1)
         
         # Create the Clause subcircuit
-        clause_circuit = Clause(cm1=cm_values[0], cm2=cm_values[1], cm3=cm_values[2], C=C)
+        clause_circuit = Clause(cm1=cm_values[0], cm2=cm_values[1], cm3=cm_values[2], C=C, R_aux=R_aux, C_aux=C_aux)
         circuit.subcircuit(clause_circuit)
         
         # Get the variable nodes for this clause
         v1_node = var_nodes[clause[0][0]]
         v2_node = var_nodes[clause[1][0]]
         v3_node = var_nodes[clause[2][0]]
+        n1_node = f'n1_{i}'
         
         # Instantiate the Clause subcircuit
-        circuit.X(f'clause_{i}', clause_circuit.name, v1_node, v2_node, v3_node, 'vdd', circuit.gnd)
+        circuit.X(f'clause_{i}', clause_circuit.name, n1_node, v1_node, v2_node, v3_node, 'vdd', circuit.gnd)
     
     return circuit
 
 
-def run_3sat_simulation(circuit, variable_names, simulation_time=10, step_time=1e-3):
+def run_3sat_simulation(circuit: Circuit, variable_names, clauses, simulation_time, step_time):
     """
     Run a transient simulation on the 3-SAT circuit.
     
     Args:
         circuit: The PySpice Circuit object
         variable_names: List of variable names
-        simulation_time: Total simulation time in seconds
-        step_time: Time step for the simulation in seconds
+        simulation_time: Total simulation time in ms
+        step_time: Time step for the simulation in ms
         
     Returns:
         The simulation results
@@ -154,6 +159,10 @@ def run_3sat_simulation(circuit, variable_names, simulation_time=10, step_time=1
         method='gear',   # Integration method (alternatives: 'trap', 'euler')
         maxord=2         # Maximum order for integration method
     )
+
+    # Print all available options
+    # print(simulator._options)
+    # raise Exception("Stop here")
     
     # Set initial conditions for variable nodes to help convergence
     # Initialize all variables to 0.5V (middle value)
@@ -161,18 +170,24 @@ def run_3sat_simulation(circuit, variable_names, simulation_time=10, step_time=1
     for name in variable_names:
         node_name = f'var_{name}'
         initial_conditions[node_name] = 0.5  # Initialize to 0.5V
+
+    for i in range(len(clauses)):
+        node_name = f'n1_{i}'
+        initial_conditions[node_name] = 1.0
     
     # Apply initial conditions
     if initial_conditions:
         simulator.initial_condition(**initial_conditions)
     
     # Run transient analysis
-    analysis = simulator.transient(step_time=step_time, end_time=simulation_time)
+    analysis = simulator.transient(step_time=step_time * 1e-3, end_time=simulation_time * 1e-3)
     
-    return analysis
+    return analysis, simulation_time
 
 
-def plot_3sat_results(analysis, variable_names, file_name, show_plot=True):
+MAX_CLAUSES_PLOTTED = 10
+
+def plot_3sat_results_full(analysis, variable_names, clauses, file_name, show_plot=True):
     """
     Plot the results of the 3-SAT simulation with each variable on its own graph.
     
@@ -184,12 +199,13 @@ def plot_3sat_results(analysis, variable_names, file_name, show_plot=True):
     """
     # Calculate the number of rows needed for the subplots
     num_variables = len(variable_names)
+    num_clauses = min(len(clauses), MAX_CLAUSES_PLOTTED)
     
-    # Create a figure with subplots - one for each variable
-    fig, axes = plt.subplots(num_variables, 1, figsize=(12, 4 * num_variables), sharex=True)
+    # Create a figure with subplots - one for each variable and one for each clause
+    fig, axes = plt.subplots(num_variables + num_clauses, 1, figsize=(12, 4 * (num_variables + num_clauses)), sharex=True)
     
-    # If there's only one variable, axes won't be an array
-    if num_variables == 1:
+    # If there's only one subplot, axes won't be an array
+    if num_variables + num_clauses == 1:
         axes = [axes]
     
     # Plot each variable on its own subplot
@@ -200,7 +216,7 @@ def plot_3sat_results(analysis, variable_names, file_name, show_plot=True):
         # Check if the node exists in the analysis results
         if node_name in analysis.nodes:
             # Plot the variable voltage
-            ax.plot(analysis.time, analysis[node_name], label=f'Variable {name}', linewidth=2)
+            ax.plot(analysis.time * 1e3, analysis[node_name], label=f'Variable {name}', linewidth=2)
             
             # Add horizontal lines at 0.25V and 0.75V to indicate decision thresholds
             ax.axhline(y=0.25, color='r', linestyle='--', alpha=0.5, label='False threshold (0.25V)')
@@ -244,13 +260,36 @@ def plot_3sat_results(analysis, variable_names, file_name, show_plot=True):
             # List available nodes for debugging
             print(f"Available nodes: {', '.join(analysis.nodes)}")
     
+    # fig2, axes2 = plt.subplots()
+
+    # Plot each clause's vam node
+    for i in range(num_clauses):
+        ax = axes[num_variables + i] # if i != 1 else axes2
+        node_name = f'xclause_{i}.vam'
+        
+        # Plot the clause vam voltage
+        ax.plot(analysis.time * 1e3, analysis[node_name], label=f'Clause {i+1} vam', linewidth=2, color='purple')
+        ax.plot(analysis.time * 1e3, analysis[f'n1_{i}'], label=f'Clause {i+1} n1', linewidth=2, color='green')
+        
+        # Add a title and y-label for this subplot
+        ax.set_title(f'Clause {i+1} vam')
+        ax.set_ylabel('Voltage (V)')
+        ax.grid(True)
+        ax.legend()
+        
+        # Get the final voltage value
+        final_voltage = float(analysis[node_name][-1])
+        
+        # Add text annotation showing the final voltage
+        ax.text(0.98, 0.95, f'Final voltage: {final_voltage:.3f}V', 
+                horizontalalignment='right',
+                verticalalignment='top',
+                transform=ax.transAxes,
+                bbox=dict(facecolor='purple', alpha=0.2))
+    
     # Add a common x-label for all subplots with proper formatting
     plt.xlabel('Time (milliseconds)')
-    
-    # Format the x-axis ticks to show milliseconds
-    for ax in axes:
-        ax.set_xticklabels([f'{x*1000:.2f}' for x in ax.get_xticks()])
-    
+
     # Adjust layout to prevent overlap
     plt.tight_layout()
     
@@ -263,8 +302,90 @@ def plot_3sat_results(analysis, variable_names, file_name, show_plot=True):
     else:
         plt.close(fig)
 
+def plot_3sat_results(analysis, variable_names, clauses, file_name, show_plot=True):
+    """
+    Plot the results of the 3-SAT simulation with variables overlayed, and clauses overlayed.
+    
+    Args:
+        analysis: The simulation results
+        variable_names: List of variable names
+        file_name: Base name for the output file (without extension)
+        show_plot: Whether to display the plot (default: True)
+    """
+    # Plot each variable on its own subplot
+    for i, name in enumerate(variable_names):
+        node_name = f'var_{name}'
+        final_voltage = float(analysis[node_name][-1])
+        satisfied_text = "True" if final_voltage > 0.5 else "False"
+        plt.plot(analysis.time * 1e3, analysis[node_name], label=f'$V_{{{i + 1}}}$ ({satisfied_text})')
+            
+    # Add a title and y-label for this subplot
+    # plt.title('Evolution of variable voltages over time')
+    plt.xlabel('Time (milliseconds)')
+    plt.ylabel('Voltage (V)')
+    plt.legend()
+    plt.tight_layout()
 
-def interpret_results(analysis, variable_names):
+    # Save the plot
+    plt.savefig(f'graphs/{file_name}_variables.png', dpi=300, bbox_inches='tight')
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
+
+    # Plot each clause's vam node
+    for i in range(len(clauses)):
+        node_name = f'xclause_{i}.vam'
+        plt.plot(analysis.time * 1e3, analysis[node_name], label=f'$V_{{a_{{{i + 1}}}}}$')
+        
+    # Add a title and y-label for this subplot
+    # plt.title('Evolution of clause auxiliary node voltages over time')
+    plt.xlabel('Time (milliseconds)')
+    plt.ylabel('Voltage (V)')
+    plt.legend()
+    plt.tight_layout()
+    
+    # Save the plot
+    plt.savefig(f'graphs/{file_name}_clauses.png', dpi=300, bbox_inches='tight')
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
+
+def plot_3sat_evolution(analysis, variable_names, clauses, file_name, show_plot=True):
+    count_satisfied_list = []
+    satisfied_at_idx = -1
+    for i in range(len(analysis.time)):
+        results, _ = interpret_results(analysis, variable_names, i)
+        satisfies_all, count_satisfied, _ = verify_results(clauses, results, variable_names)
+        count_satisfied_list.append(count_satisfied)
+        if satisfies_all and satisfied_at_idx == -1:
+            satisfied_at_idx = i
+
+    times = np.array(analysis.time) * 1e3
+    plt.plot(times, count_satisfied_list)
+
+    if satisfied_at_idx != -1:
+        print(f"Satisfied at {times[satisfied_at_idx]}")
+    
+    # Also add a vertical line at time when satisfies_all is true
+    if satisfied_at_idx != -1:
+        plt.axvline(x=times[satisfied_at_idx], color='red', linestyle='--', label='All clauses satisfied')
+    plt.xlabel('Time (milliseconds)')
+    plt.ylabel('Number of clauses satisfied')
+    plt.savefig(f'graphs/{file_name}_evolution.png', dpi=300, bbox_inches='tight')
+
+    # Only show the plot if requested
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
+
+    return times[satisfied_at_idx]
+
+
+
+def interpret_results(analysis, variable_names, at=-1):
     """
     Interpret the results of the 3-SAT simulation.
     
@@ -279,7 +400,7 @@ def interpret_results(analysis, variable_names):
     final_voltages = {}
     for name in variable_names:
         node_name = f'var_{name}'
-        final_voltage = float(analysis[node_name][-1])
+        final_voltage = float(analysis[node_name][at])
         final_voltages[name] = final_voltage
     
     # Interpret the voltages as boolean values
@@ -301,6 +422,35 @@ def interpret_results(analysis, variable_names):
     
     return results, final_voltages
 
+def verify_results(clauses, results, variable_names):
+    satisfies_all = True
+
+    not_satisfied = []
+
+    count_satisfied = 0
+    for i, clause in enumerate(clauses):
+        clause_satisfied = False
+        for var_idx, is_negated in clause:
+            var_name = variable_names[var_idx]
+            var_value = results[var_name]
+            if var_value is None:
+                continue  # Skip undecided variables
+            
+            # Check if this literal satisfies the clause
+            if (not is_negated and var_value) or (is_negated and not var_value):
+                clause_satisfied = True
+                break
+        
+        if not clause_satisfied:
+            satisfies_all = False
+            not_satisfied.append(i)
+        else:
+            count_satisfied += 1
+
+    return satisfies_all, count_satisfied, not_satisfied
+
+SIMULATION_TIME = 200 if USE_AUX else 10000
+STEP_TIME = 10e-3 if USE_AUX else 1
 
 def main():
     """
@@ -309,8 +459,8 @@ def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(description='Solve a 3-SAT problem using an analog circuit simulator.')
     parser.add_argument('--cnf', type=str, help='Path to the CNF file')
-    parser.add_argument('--sim-time', type=float, default=10, help='Simulation time in seconds')
-    parser.add_argument('--step-time', type=float, default=1e-3, help='Simulation step time in seconds')
+    parser.add_argument('--sim-time', type=float, default=SIMULATION_TIME, help='Simulation time in milliseconds')
+    parser.add_argument('--step-time', type=float, default=STEP_TIME, help='Simulation step time in milliseconds')
     args = parser.parse_args()
     
     # If no CNF file is provided, use the default example
@@ -334,12 +484,12 @@ def main():
     
     # Run the simulation
     print("\nRunning simulation...")
-    analysis = run_3sat_simulation(circuit, variable_names, 
+    analysis, _ = run_3sat_simulation(circuit, variable_names, clauses,
                                   simulation_time=args.sim_time, 
                                   step_time=args.step_time)
     
     # Plot the results
-    plot_3sat_results(analysis, variable_names, args.cnf.split("/")[-1].split(".")[0])
+    plot_3sat_results(analysis, variable_names, clauses, args.cnf.split("/")[-1].split(".")[0])
     
     # Interpret the results
     results, final_voltages = interpret_results(analysis, variable_names)
@@ -352,28 +502,16 @@ def main():
         print(f"Variable {name}: {status} (Voltage: {final_voltages[name]:.3f}V)")
     
     # Check if the assignment satisfies all clauses
-    satisfies_all = True
-    for i, clause in enumerate(clauses):
-        clause_satisfied = False
-        for var_idx, is_negated in clause:
-            var_name = variable_names[var_idx]
-            var_value = results[var_name]
-            if var_value is None:
-                continue  # Skip undecided variables
-            
-            # Check if this literal satisfies the clause
-            if (not is_negated and var_value) or (is_negated and not var_value):
-                clause_satisfied = True
-                break
-        
-        if not clause_satisfied:
-            satisfies_all = False
-            print(f"Clause {i+1} is not satisfied!")
+    satisfies_all, count_satisfied, not_satisfied = verify_results(clauses, results, variable_names)
     
     if satisfies_all:
-        print("\nThe assignment satisfies all clauses!")
+        print(f"\nThe assignment satisfies all clauses! ({count_satisfied}/{len(clauses)})")
     else:
-        print("\nThe assignment does not satisfy all clauses.")
+        print(f"\nThe assignment does not satisfy all clauses. ({count_satisfied}/{len(clauses)})")
+    for clause in not_satisfied:
+        print(f"Clause {clause + 1} is not satisfied!")
+
+    plot_3sat_evolution(analysis, variable_names, clauses, args.cnf.split("/")[-1].split(".")[0])
 
 
 if __name__ == '__main__':
