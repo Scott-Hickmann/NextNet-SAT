@@ -8,6 +8,8 @@ from nor import NorGate
 from branch_voltage import BranchVoltage
 from branch_current import BranchCurrent
 
+from config import USE_AUX
+
 
 class Branch(SubCircuit):
     """
@@ -64,14 +66,14 @@ class Branch(SubCircuit):
         
         # Create an internal node for connecting the voltage and current subcircuits
         v_stage12 = 'v_stage12'
-        v_stage23 = 'v_stage23'
+        v_stage23 = 'v_stage23' if USE_AUX else 'v_stage12'
         
         # Instantiate the BranchVoltage subcircuit
         self.X('voltage_stage', branch_voltage.name, 'vi2', 'vi3', v_stage12, 'vdd', 'gnd')
 
         # Analog multiplier to multiply the output of the voltage stage with the auxiliary voltage
-        # TODO: Add a real multiplier
-        self.B('multiplier', v_stage23, 'gnd', v='V(v_stage12)*V(vam)')
+        if USE_AUX:
+            self.B('multiplier', v_stage23, 'gnd', v='V(v_stage12)*V(vam)')
         
         # Instantiate the BranchCurrent subcircuit
         self.X('current_stage', branch_current.name, v_stage23, 'imi_pos', 'imi_neg', 'vdd', 'gnd')

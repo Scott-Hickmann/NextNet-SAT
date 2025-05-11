@@ -3,6 +3,7 @@ from PySpice.Spice.Netlist import Circuit, SubCircuit
 
 from branch import Branch
 from am_new import AMNewCircuit
+from config import USE_AUX
 
 class Clause(SubCircuit):
     """
@@ -49,12 +50,16 @@ class Clause(SubCircuit):
         if cm1 == 0 or cm2 == 0 or cm3 == 0:
             raise ValueError("0 is not allowed as a control value")
         
-        am = AMNewCircuit(cm1=cm1, cm2=cm2, cm3=cm3, R=R_aux, C=C_aux)
-        # am = AMFull(cm1=cm1, cm2=cm2, cm3=cm3, C=C_aux, gain=2)
-        self.subcircuit(am)
+        if USE_AUX:
+            am = AMNewCircuit(cm1=cm1, cm2=cm2, cm3=cm3, R=R_aux, C=C_aux)
+            # am = AMFull(cm1=cm1, cm2=cm2, cm3=cm3, C=C_aux, gain=2)
+            self.subcircuit(am)
         
-        # Instantiate the AMFull subcircuit
-        self.X('am', am.name, 'vam', 'n1', 'v1', 'v2', 'v3', 'vdd', 'gnd')
+            # Instantiate the AMFull subcircuit
+            self.X('am', am.name, 'vam', 'n1', 'v1', 'v2', 'v3', 'vdd', 'gnd')
+        else:
+            self.V('am', 'vam', 'gnd', 1)
+            self.V('n1', 'n1', 'gnd', 1)
         
         # Create the three Branch subcircuits with different configurations
         branch1 = Branch(cmi=cm1, cmi2=cm2, cmi3=cm3, C=C)

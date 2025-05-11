@@ -13,3 +13,4 @@ wheels/
 .DS_Store
 
 graphs/ideal_aux/*
+graphs/new_aux/*

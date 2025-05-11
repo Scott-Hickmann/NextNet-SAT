@@ -8,6 +8,7 @@ from pysat.formula import CNF
 
 from clause import Clause
 from variable import Variable
+from config import USE_AUX
 
 
 def load_cnf_file(cnf_file_path):
@@ -363,8 +364,13 @@ def plot_3sat_evolution(analysis, variable_names, clauses, file_name, show_plot=
 
     times = np.array(analysis.time) * 1e3
     plt.plot(times, count_satisfied_list)
+
+    if satisfied_at_idx != -1:
+        print(f"Satisfied at {times[satisfied_at_idx]}")
+    
     # Also add a vertical line at time when satisfies_all is true
-    plt.axvline(x=times[satisfied_at_idx], color='red', linestyle='--', label='All clauses satisfied')
+    if satisfied_at_idx != -1:
+        plt.axvline(x=times[satisfied_at_idx], color='red', linestyle='--', label='All clauses satisfied')
     plt.xlabel('Time (milliseconds)')
     plt.ylabel('Number of clauses satisfied')
     plt.savefig(f'graphs/{file_name}_evolution.png', dpi=300, bbox_inches='tight')
@@ -443,8 +449,8 @@ def verify_results(clauses, results, variable_names):
 
     return satisfies_all, count_satisfied, not_satisfied
 
-SIMULATION_TIME = 200
-STEP_TIME = 10e-3
+SIMULATION_TIME = 200 if USE_AUX else 10000
+STEP_TIME = 10e-3 if USE_AUX else 1
 
 def main():
     """
