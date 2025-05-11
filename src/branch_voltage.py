@@ -58,7 +58,7 @@ class BranchVoltage(SubCircuit):
         self.X('mux3', mux3.name, 'vi3', 'mux3_out', 'vdd', 'gnd')
         
         # Instantiate the NOR gate
-        self.X('nor1', nor_gate.NAME, 'mux2_out', 'mux3_out', 'vmi', 'vdd', 'gnd')
+        self.X('nor1', nor_gate.name, 'mux2_out', 'mux3_out', 'vmi', 'vdd', 'gnd')
 
 
 # Helper function to calculate the theoretical output based on the mathematical model

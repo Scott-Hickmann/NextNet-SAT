@@ -4,8 +4,11 @@ from PySpice.Unit import u_V
 import matplotlib.pyplot as plt
 import numpy as np
 
+from nor import NorGate
 from branch_voltage import BranchVoltage
 from branch_current import BranchCurrent
+
+from config import USE_AUX
 
 
 class Branch(SubCircuit):
@@ -17,6 +20,7 @@ class Branch(SubCircuit):
     subcircuit to produce a current output (Imi).
     
     Nodes:
+    - vam: Auxiliary voltage node
     - vi2: First input voltage
     - vi3: Second input voltage
     - imi_pos: Positive terminal for current output
@@ -26,7 +30,7 @@ class Branch(SubCircuit):
     
     The cmi2, cmi3, cmi values, and C parameter are passed as constructor arguments.
     """
-    NODES = ('vi2', 'vi3', 'imi_pos', 'imi_neg', 'vdd', 'gnd')
+    NODES = ('vam', 'vi2', 'vi3', 'imi_pos', 'imi_neg', 'vdd', 'gnd')
     
     def __init__(self, cmi, cmi2, cmi3, C):
         """
@@ -48,6 +52,9 @@ class Branch(SubCircuit):
         
         # Create and add the BranchVoltage subcircuit
         branch_voltage = BranchVoltage(cmi2=cmi2, cmi3=cmi3)
+
+        # Create and add the NOR gate for the auxiliary stage
+        nor_gate = NorGate()
         
         # Create and add the BranchCurrent subcircuit with the C parameter
         branch_current = BranchCurrent(cmi=cmi, C=C)
@@ -55,15 +62,21 @@ class Branch(SubCircuit):
         # Add the subcircuits
         self.subcircuit(branch_voltage)
         self.subcircuit(branch_current)
+        self.subcircuit(nor_gate)
         
         # Create an internal node for connecting the voltage and current subcircuits
-        internal_vmi = 'vmi_internal'
+        v_stage12 = 'v_stage12'
+        v_stage23 = 'v_stage23' if USE_AUX else 'v_stage12'
         
         # Instantiate the BranchVoltage subcircuit
-        self.X('voltage_stage', branch_voltage.name, 'vi2', 'vi3', internal_vmi, 'vdd', 'gnd')
+        self.X('voltage_stage', branch_voltage.name, 'vi2', 'vi3', v_stage12, 'vdd', 'gnd')
+
+        # Analog multiplier to multiply the output of the voltage stage with the auxiliary voltage
+        if USE_AUX:
+            self.B('multiplier', v_stage23, 'gnd', v='V(v_stage12)*V(vam)')
         
         # Instantiate the BranchCurrent subcircuit
-        self.X('current_stage', branch_current.name, internal_vmi, 'imi_pos', 'imi_neg', 'vdd', 'gnd')
+        self.X('current_stage', branch_current.name, v_stage23, 'imi_pos', 'imi_neg', 'vdd', 'gnd')
 
 
 # Helper function to calculate the theoretical output based on the mathematical model
@@ -130,6 +143,7 @@ def main():
     # Add input voltage sources
     v_i2 = circuit.V('i2', 'vi2', circuit.gnd, 0@u_V)  # Default input of 0V
     v_i3 = circuit.V('i3', 'vi3', circuit.gnd, 0@u_V)  # Default input of 0V
+    circuit.V('am', 'vam', circuit.gnd, 1@u_V)  # Fix am to 1V for 0 influence
     
     # Test with different cmi combinations
     # We'll test a few representative combinations
@@ -158,7 +172,7 @@ def main():
         circuit.R(f'meas{idx}', output_node, circuit.gnd, 1)
         
         # Instantiate the branch with proper connections for current measurement
-        circuit.X(f'branch{idx}', branch.name, 'vi2', 'vi3', output_node, circuit.gnd, 'vdd', circuit.gnd)
+        circuit.X(f'branch{idx}', branch.name, 'vam', 'vi2', 'vi3', output_node, circuit.gnd, 'vdd', circuit.gnd)
         
         # Add to results tracking
         results.append(output_node)
@@ -299,6 +313,7 @@ def main():
             test_circuit.V('dd', 'vdd', test_circuit.gnd, vdd@u_V)
             test_circuit.V('i2', 'vi2', test_circuit.gnd, vi2@u_V)
             test_circuit.V('i3', 'vi3', test_circuit.gnd, vi3@u_V)
+            test_circuit.V('am', 'vam', test_circuit.gnd, 1@u_V) # Fix am to 1V for 0 influence
             
             # Create and add the complete branch subcircuit
             branch = Branch(cmi=cmi, cmi2=cmi2, cmi3=cmi3, C=C)
@@ -308,7 +323,7 @@ def main():
             test_circuit.R('meas', 'out', test_circuit.gnd, 1)
             
             # Instantiate the branch with proper connections for current measurement
-            test_circuit.X('branch', branch.name, 'vi2', 'vi3', 'out', circuit.gnd, 'vdd', circuit.gnd)
+            test_circuit.X('branch', branch.name, 'vam', 'vi2', 'vi3', 'out', circuit.gnd, 'vdd', circuit.gnd)
             
             # Run simulation
             test_simulator = test_circuit.simulator(temperature=25, nominal_temperature=25)
